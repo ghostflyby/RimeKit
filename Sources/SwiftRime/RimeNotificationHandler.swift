@@ -46,8 +46,8 @@ public enum RimeNotificationType: Codable {
     }
 }
 
-public extension RimeEngine {
-    var notificationHandler: RimeNotificationHandler? {
+extension RimeEngine {
+    public var notificationHandler: RimeNotificationHandler? {
         get { opaque?.body }
         set {
             if let newValue {

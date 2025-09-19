@@ -1,68 +1,71 @@
 import CLibrime
 
-public class RimeTraits  {
-	@CString internal var sharedDataDir: String
-	@CString internal var userDataDir: String
-	@CString internal var distributionName: String
-	@CString internal var distributionCodeName: String
-	@CString internal var distributionVersion: String
-	@CString internal var appName: String
-	@CStringArray internal var modules: [String]
-	internal let minLogLevel: RimeLogLevel
-	@CString internal var logDir: String
-	@CString internal var prebuiltDataDir: String
-	@CString internal var stagingDir: String
+/// The configuration for initializing RimeEngine.
+public struct RimeTraits: Sendable, Codable {
+	var sharedDataDir: String
+	var userDataDir: String
+	var distributionName: String
+	var distributionCodeName: String
+	var distributionVersion: String
+	var appName: String
+	var modules: [String] = []
+	var minLogLevel: RimeLogLevel = .info
+	var logDir: String? = nil
+	var prebuiltDataDir: String? = nil
+	var stagingDir: String? = nil
+}
 
-	public init(
-		sharedDataDir: String,
-		userDataDir: String,
-		distributionName: String,
-		distributionCodeName: String,
-		distributionVersion: String,
-		appName: String,
-		modules: [String] = [],
-        minLogLevel: RimeLogLevel = .info,
-		logDir: String = "",
-		prebuiltDataDir: String = "",
-		stagingDir: String = ""
-	) {
-		self.sharedDataDir = sharedDataDir
-		self.userDataDir = userDataDir
-		self.distributionName = distributionName
-		self.distributionCodeName = distributionCodeName
-		self.distributionVersion = distributionVersion
-		self.appName = appName
-		self.modules = modules
-		self.minLogLevel = minLogLevel
-		self.logDir = logDir
-		self.prebuiltDataDir = prebuiltDataDir
-		self.stagingDir = stagingDir
+struct RimeTraitsReleaseHandle: ~Copyable {
+	fileprivate var cStrings: [UnsafePointer<CChar>]
+	fileprivate var cStringArrays: [UnsafeMutablePointer<UnsafePointer<CChar>?>?]
+
+	deinit {
+		for cString in cStrings {
+			cString.deallocate()
+		}
+		for cStringArray in cStringArrays {
+			cStringArray?.deallocateCStringArray()
+		}
 	}
-    
+
+	fileprivate mutating func add(_ string: String?) -> UnsafePointer<CChar> {
+		guard let string else { return UnsafePointer(bitPattern: 0)! }
+		let pointer = string.toCString()
+		cStrings.append(pointer)
+		return pointer
+	}
+
+	fileprivate mutating func add(_ stringArray: [String]) -> UnsafeMutablePointer<
+		UnsafePointer<CChar>?
+	> {
+		let pointer = stringArray.toNullTerminatedCStringArray()
+		cStringArrays.append(pointer)
+		return pointer
+	}
 }
 
-extension RimeTraits : SwiftDataSized {
-    internal typealias CType = rime_traits_t
-    internal func toCStructure(with c: inout rime_traits_t) {
-        c.shared_data_dir = $sharedDataDir
-        c.user_data_dir = $userDataDir
-        c.distribution_name = $distributionName
-        c.distribution_code_name = $distributionCodeName
-        c.distribution_version = $distributionVersion
-        c.app_name = $appName
-        c.modules = $modules
-        c.min_log_level = minLogLevel.rawValue
-        c.log_dir = $logDir
-        c.prebuilt_data_dir = $prebuiltDataDir
-        c.staging_dir = $stagingDir
-    }
+extension RimeTraits {
+	internal func toCStructure(_ c: inout rime_traits_t) -> RimeTraitsReleaseHandle {
+		var handle = RimeTraitsReleaseHandle(cStrings: [], cStringArrays: [])
+		c.shared_data_dir = handle.add(sharedDataDir)
+		c.user_data_dir = handle.add(userDataDir)
+		c.distribution_name = handle.add(distributionName)
+		c.distribution_code_name = handle.add(distributionCodeName)
+		c.distribution_version = handle.add(distributionVersion)
+		c.app_name = handle.add(appName)
+		c.modules = handle.add(modules)
+		c.min_log_level = minLogLevel.rawValue
+		c.log_dir = handle.add(logDir)
+		c.prebuilt_data_dir = handle.add(prebuiltDataDir)
+		c.staging_dir = handle.add(stagingDir)
+		return handle
+	}
 
 }
 
-public enum RimeLogLevel: Int32 {
-    case info = 0
-    case warning = 1
-    case error = 2
-    case fatal = 3
+public enum RimeLogLevel: Int32, Sendable, Codable {
+	case info = 0
+	case warning = 1
+	case error = 2
+	case fatal = 3
 }
-    

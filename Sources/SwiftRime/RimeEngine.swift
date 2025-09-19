@@ -19,8 +19,9 @@ public final actor RimeEngine {
     }
 
     public func initialize(with traits: borrowing RimeTraits) {
-        var traits = traits.toCStructure()
-        rimeApi.initialize(&traits)
+        var t = rime_traits_t.rimeStructInit()
+        _ = traits.toCStructure(&t)
+        rimeApi.initialize(&t)
     }
 
     public func finalize() {

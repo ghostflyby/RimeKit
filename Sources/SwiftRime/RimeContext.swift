@@ -12,7 +12,7 @@ public struct RimeContext: Sendable, Codable {
         composition = RimeComposition(rawValue.composition)
         menu = RimeMenu(rawValue.menu)
         commitTextPreview = String(cString: rawValue.commit_text_preview)
-        selectLabels = CStringArray.convertCStringArrayNullTerminated(rawValue.select_labels)
+        selectLabels = rawValue.select_labels.toStringArray()
     }
 }
 
