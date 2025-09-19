@@ -16,111 +16,101 @@ public protocol Rime {
     func initializeDeployer(with traits: RimeTraits)
     func prebuild() -> Bool
     func deploy() -> Bool
-    func deploySchema(schemaId: String) -> Bool
+    func deploySchema(withID schemaID: String) -> Bool
     func deployConfig(filename: String, versionKey: String) -> Bool
     func syncUserData() -> Bool
 
-    func createSession() -> RimeSessionId
-    func findSession(id: RimeSessionId) -> Bool
-    func destroySession(id: RimeSessionId) -> Bool
+    func createSession() -> RimeSessionID
+    func findSession(with sessionID: RimeSessionID) -> Bool
+    func destroySession(with sessionID: RimeSessionID) -> Bool
     func cleanupStaleSessions()
     func cleanupAllSessions()
 
-    func processKey(keycode: CInt, mask: CInt) async -> Bool
+    func processKey(_ keyCode: CInt, modifierMask: CInt) async -> Bool
     func commitComposition() async -> Bool
     func clearComposition() async
 
-    func commit(session: RimeSessionId) -> RimeCommit?
-    func status(id: RimeSessionId) async -> RimeStatus?
-    func context(session: RimeSessionId) -> RimeContext?
+    func commit(for sessionID: RimeSessionID) -> RimeCommit?
+    func status(for sessionID: RimeSessionID) async -> RimeStatus?
+    func context(for sessionID: RimeSessionID) -> RimeContext?
 
-    func getOption(session: RimeSessionId, option: String) -> Bool
-    func setOption(session: RimeSessionId, option: String, value: Bool)
-    func getProperty(session: RimeSessionId, prop: String) -> String?
-    func setProperty(session: RimeSessionId, prop: String, value: String)
+    func option(named option: String, for sessionID: RimeSessionID) -> Bool
+    func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID)
+    func property(named property: String, for sessionID: RimeSessionID) -> String?
+    func setProperty(_ property: String, value: String, for sessionID: RimeSessionID)
 
     var schemaList: RimeSchemaList { get }
-    func currentSchema(session: RimeSessionId) -> String?
-    func selectSchema(session: RimeSessionId, schemaId: String) -> Bool
+    func currentSchema(for sessionID: RimeSessionID) -> String?
+    func selectSchema(_ schemaID: String, for sessionID: RimeSessionID) -> Bool
 
-    func open(schemaId: String) -> RimeConfig?
-    func open(configId: String) -> RimeConfig?
+    func openSchema(_ schemaID: String) -> RimeConfig?
+    func openConfig(_ configID: String) -> RimeConfig?
 
     func close(config: borrowing RimeConfig) -> Bool
 
-    func string(forKey key: String, inConfig config: borrowing RimeConfig) -> String?
-    func int(forKey key: String, inConfig config: borrowing RimeConfig) -> Int32?
-    func bool(forKey key: String, inConfig config: borrowing RimeConfig) -> Bool?
-    func double(forKey key: String, inConfig config: borrowing RimeConfig) -> Double?
-    func item(forKey key: String, inConfig config: borrowing RimeConfig) -> RimeConfig?
-    func set(_ value: String, forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
-    func set(_ value: Int32, forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
-    func set(_ value: Bool, forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
-    func set(_ value: Double, forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
+    func string(forKey key: String, in config: borrowing RimeConfig) -> String?
+    func int(forKey key: String, in config: borrowing RimeConfig) -> Int32?
+    func bool(forKey key: String, in config: borrowing RimeConfig) -> Bool?
+    func double(forKey key: String, in config: borrowing RimeConfig) -> Double?
+    func item(forKey key: String, in config: borrowing RimeConfig) -> RimeConfig?
+    func set(_ value: String, forKey key: String, in config: borrowing RimeConfig) -> Bool
+    func set(_ value: Int32, forKey key: String, in config: borrowing RimeConfig) -> Bool
+    func set(_ value: Bool, forKey key: String, in config: borrowing RimeConfig) -> Bool
+    func set(_ value: Double, forKey key: String, in config: borrowing RimeConfig) -> Bool
     func set(
-        _ value: borrowing RimeConfig, forKey key: String, inConfig config: borrowing RimeConfig
-    )
-        -> Bool
+        _ value: borrowing RimeConfig, forKey key: String, in config: borrowing RimeConfig
+    ) -> Bool
 
-    func remove(forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
+    func removeValue(forKey key: String, in config: borrowing RimeConfig) -> Bool
 
-    func update(signature: String, forConfig config: borrowing RimeConfig) -> Bool
-    func beginMap(forKey key: String, inConfig config: borrowing RimeConfig) -> RimeConfigIterator
-    func beginList(forKey key: String, inConfig config: borrowing RimeConfig) -> RimeConfigIterator
-    func next(configIterator: inout RimeConfigIterator)
-    func end(configIterator: inout RimeConfigIterator)
+    func update(signature: String, for config: borrowing RimeConfig) -> Bool
+    func beginMap(forKey key: String, in config: borrowing RimeConfig) -> RimeConfigIterator
+    func beginList(forKey key: String, in config: borrowing RimeConfig) -> RimeConfigIterator
+    func advanceConfigIterator(_ iterator: inout RimeConfigIterator)
+    func endConfigIterator(_ iterator: inout RimeConfigIterator)
 
-    func initConfig() -> RimeConfig
+    func makeConfig() -> RimeConfig
     func load(yaml: String, into config: borrowing RimeConfig) -> Bool
-    func createList(forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
+    func createList(forKey key: String, in config: borrowing RimeConfig) -> Bool
 
-    func createMap(forKey key: String, inConfig config: borrowing RimeConfig) -> Bool
+    func createMap(forKey key: String, in config: borrowing RimeConfig) -> Bool
 
-    func listSize(forKey key: String, inConfig config: borrowing RimeConfig) -> Int
+    func listSize(forKey key: String, in config: borrowing RimeConfig) -> Int
 
-    //   // testing
-
-    //   Bool (*simulate_key_sequence)(RimeSessionId session_id,
-    //                                 const char* key_sequence);
-
-    //   // module
-
-    //   Bool (*register_module)(RimeModule* module);
-    //   RimeModule* (*find_module)(const char* module_name);
-
-    //   Bool (*run_task)(const char* task_name);
-
-    var userId: String { get }
+    var userID: String { get }
     var userDataSyncDirectory: String { get }
 
     var input: String { get set }
     var caretPosition: Int { get set }
     var version: String { get }
 
-    func selectCandidate(at: Int, for: RimeSessionId) -> Bool
-    func selectCandidateOnCurrentPage(at: Int, for: RimeSessionId) -> Bool
+    func selectCandidate(at index: Int, for session: RimeSessionID) -> Bool
+    func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) -> Bool
 
-    func beginCandidates(for session: RimeSessionId) -> RimeCandidateIterator
-    func next(candidateIterator: inout RimeCandidateIterator)
-    func end(candidateIterator: inout RimeCandidateIterator)
+    func beginCandidates(for session: RimeSessionID) -> RimeCandidateIterator
+    func advanceCandidateIterator(_ iterator: inout RimeCandidateIterator)
+    func endCandidateIterator(_ iterator: inout RimeCandidateIterator)
 
-    func stateLabel(for key: String, state: RimeState, in session: RimeSessionId) -> String?
-    func stateLabel(for key: String, state: RimeState, abbreviated: Bool, in session: RimeSessionId)
-        -> String?
+    func stateLabel(for key: String, state: RimeState, in session: RimeSessionID) -> String?
+    func stateLabel(
+        for key: String,
+        state: RimeState,
+        abbreviated: Bool,
+        in session: RimeSessionID
+    ) -> String?
 
-    func removeCandidate(at: Int, for session: RimeSessionId) -> Bool
-    func removeCandidateOnCurrentPage(at: Int, for session: RimeSessionId) -> Bool
+    func removeCandidate(at index: Int, for session: RimeSessionID) -> Bool
+    func removeCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) -> Bool
 
-    func highlightCandidate(at: Int, for session: RimeSessionId) -> Bool
-    func highlightCandidateOnCurrentPage(at: Int, for session: RimeSessionId) -> Bool
-    func page(_ direction: RimePageDirection, for session: RimeSessionId) -> Bool
+    func highlightCandidate(at index: Int, for session: RimeSessionID) -> Bool
+    func highlightCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) -> Bool
+    func page(_ direction: RimePageDirection, for session: RimeSessionID) -> Bool
 
     var sharedDataDirectory: String { get }
     var userDataDirectory: String { get }
     var prebuiltDataDirectory: String { get }
     var stagingDirectory: String { get }
     var syncDirectory: String { get }
-
 }
 
 public enum RimeState {

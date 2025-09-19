@@ -1,100 +1,93 @@
 import CLibrime
 
 public final actor RimeEngine {
-	nonisolated public static let shared = RimeEngine()
-	let rimeApi: RimeApi_stdbool
-    var opaque: Box? = nil
+    nonisolated public static let shared = RimeEngine()
 
-	private init() {
-		self.rimeApi = rime_get_api_stdbool().pointee
-	}
-    
-    public init(raw:UnsafeRawPointer){
-        self.rimeApi = raw.load(as: RimeApi_stdbool.self)
-    }
-    
-    public init(opaque:OpaquePointer){
-        let pointer = UnsafeRawPointer(opaque)
-        self.init(raw: pointer)
+    let rimeApi: RimeApi_stdbool
+    var opaque: Box?
+
+    private init() {
+        rimeApi = rime_get_api_stdbool().pointee
     }
 
-	public func initialize(traits: borrowing RimeTraits) {
-		var traits = traits.toCStructure()
-		rimeApi.initialize(&traits)
-	}
+    public init(raw pointer: UnsafeRawPointer) {
+        rimeApi = pointer.load(as: RimeApi_stdbool.self)
+    }
 
-	public func finalize() {
-		rimeApi.finalize()
-	}
+    public init(opaque pointer: OpaquePointer) {
+        self.init(raw: UnsafeRawPointer(pointer))
+    }
 
+    public func initialize(with traits: borrowing RimeTraits) {
+        var traits = traits.toCStructure()
+        rimeApi.initialize(&traits)
+    }
 
+    public func finalize() {
+        rimeApi.finalize()
+    }
 }
 
-
-
-public extension RimeEngine {
-    
-    func startMaintenance(fullCheck : Bool)->Bool {
-       rimeApi.start_maintenance(fullCheck)
+extension RimeEngine {
+    public func startMaintenance(fullCheck: Bool) -> Bool {
+        rimeApi.start_maintenance(fullCheck)
     }
-    
-    var isMaintenanceMode:Bool {
+
+    public var isMaintenanceMode: Bool {
         rimeApi.is_maintenance_mode()
     }
-    
-    func joinMaintenanceThread() {
+
+    public func joinMaintenanceThread() {
         rimeApi.join_maintenance_thread()
     }
 }
-//void (*set_option)(RimeSessionId session_id, const char* option, Bool value);
-//Bool (*get_option)(RimeSessionId session_id, const char* option);
-//
-//void (*set_property)(RimeSessionId session_id,
-//                     const char* prop,
-//                     const char* value);
-//Bool (*get_property)(RimeSessionId session_id,
-//                     const char* prop,
-//                     char* value,
-//                     size_t buffer_size);
 
 extension RimeEngine {
-    func getOption(session:RimeSessionId, option:String) -> Bool {
-        rimeApi.get_option(session.id, option)
+    func option(named option: String, for sessionID: RimeSessionID) -> Bool {
+        rimeApi.get_option(sessionID.rawValue, option)
     }
-    
-    func setOption(session:RimeSessionId, option:String, value:Bool) {
-        rimeApi.set_option(session.id, option, value)
+
+    func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID) {
+        rimeApi.set_option(sessionID.rawValue, option, value)
     }
-    
-    func getProperty(session:RimeSessionId, prop:String) -> String? {
+
+    func property(named property: String, for sessionID: RimeSessionID) -> String? {
         let bufferSize = 1024
-        let buffer :[CChar] = Array(repeating: 0, count: bufferSize)
-        return buffer.withUnsafeBufferPointer{ ptr in
-            return if rimeApi.get_property(session.id, prop, UnsafeMutablePointer(mutating: ptr.baseAddress), bufferSize)
-            {String(cString: ptr.baseAddress!)}
-            else {nil}
+        let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
+        return buffer.withUnsafeBufferPointer { pointer in
+            guard
+                rimeApi.get_property(
+                    sessionID.rawValue,
+                    property,
+                    UnsafeMutablePointer(mutating: pointer.baseAddress),
+                    bufferSize
+                )
+            else {
+                return nil
+            }
+            return pointer.baseAddress.map { String(cString: $0) }
         }
     }
-    
-    func setProperty(session:RimeSessionId, prop:String, value:String) {
-        rimeApi.set_property(session.id, prop, value)
+
+    func setProperty(_ property: String, value: String, for sessionID: RimeSessionID) {
+        rimeApi.set_property(sessionID.rawValue, property, value)
     }
-    
 }
 
-public extension RimeSession {
-    func get(option:String) async -> Bool {
-        await engine.getOption(session: self.id, option: option)
+extension RimeSession {
+    public func option(named option: String) async -> Bool {
+        await engine.option(named: option, for: sessionID)
     }
-    func set(option:String, value:Bool) async {
-        await engine.setOption(session: self.id, option: option, value: value)
+
+    public func setOption(_ option: String, value: Bool) async {
+        await engine.setOption(option, value: value, for: sessionID)
     }
-    func get(prop:String) async -> String? {
-        await engine.getProperty(session: self.id, prop: prop)
+
+    public func property(named property: String) async -> String? {
+        await engine.property(named: property, for: sessionID)
     }
-    func set(prop:String, value:String) async {
-        await engine.setProperty(session: self.id, prop: prop, value: value)
+
+    public func setProperty(_ property: String, value: String) async {
+        await engine.setProperty(property, value: value, for: sessionID)
     }
 }
-    
-

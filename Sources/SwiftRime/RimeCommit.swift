@@ -1,38 +1,36 @@
 import CLibrime
 
-public struct RimeCommit :Sendable,Codable{
-    public let text : String
+public struct RimeCommit: Sendable, Codable {
+    public let text: String
 }
 
-public extension RimeSession {
-    var commit: RimeCommit? {
-        get async{
-            await engine.commit(session: self.id)
+extension RimeSession {
+    public var commit: RimeCommit? {
+        get async {
+            await engine.commit(for: sessionID)
         }
     }
-    
-    var commitText: String? {
-        get async{
-            await engine.commit(session: self.id)?.text
+
+    public var commitText: String? {
+        get async {
+            await engine.commit(for: sessionID)?.text
         }
     }
 }
 
-fileprivate extension RimeCommit {
-     init(raw: rime_commit_t, engine: RimeEngine) {
-        text = String(cString: raw.text)
+extension RimeCommit {
+    fileprivate init(rawValue: rime_commit_t, engine _: RimeEngine) {
+        text = String(cString: rawValue.text)
     }
 }
 
-fileprivate extension RimeEngine {
-    func commit(session: RimeSessionId) -> RimeCommit? {
+extension RimeEngine {
+    fileprivate func commit(for sessionID: RimeSessionID) -> RimeCommit? {
         var commit = rime_commit_t.rimeStructInit()
         defer { _ = rimeApi.free_commit(&commit) }
-        return if rimeApi.get_commit(session.id, &commit){
-            RimeCommit(raw: commit, engine: self)
-        }else {
-            nil
+        guard rimeApi.get_commit(sessionID.rawValue, &commit) else {
+            return nil
         }
+        return RimeCommit(rawValue: commit, engine: self)
     }
 }
-    

@@ -1,86 +1,86 @@
 import CLibrime
 import Darwin
 
-public struct RimeSessionId:Sendable ,Codable {
-     let id : UInt
+public struct RimeSessionID: Sendable, Codable, RawRepresentable {
+    public let rawValue: UInt
+
+    public init(rawValue: UInt) {
+        self.rawValue = rawValue
+    }
 }
 
 public struct RimeSession: ~Copyable {
-	internal let id: RimeSessionId
-    internal let engine : RimeEngine
-    
+    internal let sessionID: RimeSessionID
+    internal let engine: RimeEngine
 
-    public init( engine: RimeEngine) async {
-        self.id = await engine.createSession()
+    public init(engine: RimeEngine) async {
+        self.sessionID = await engine.createSession()
         self.engine = engine
-	}
+    }
 
-    public init?(engine: RimeEngine, id: RimeSessionId) async {
-        if await engine.findSession(id: id) {
-            self.id = id
-            self.engine = engine
-        }else {return nil}
+    public init?(engine: RimeEngine, sessionID: RimeSessionID) async {
+        guard await engine.findSession(with: sessionID) else { return nil }
+        self.sessionID = sessionID
+        self.engine = engine
     }
 
     deinit {
         let engine = engine
-        let id = id
-        Task.detached{
-            await engine.destroySession(id: id)
+        let sessionID = sessionID
+        Task.detached {
+            await engine.destroySession(with: sessionID)
         }
     }
 }
 
-public extension RimeSession{
-    func processKey(keycode:CInt,  mask:CInt)async->Bool {
-        await engine.processKey(session: self.id, keycode: keycode, mask: mask)
+extension RimeSession {
+    public func processKey(_ keyCode: CInt, modifierMask: CInt) async -> Bool {
+        await engine.processKey(for: sessionID, keyCode: keyCode, modifierMask: modifierMask)
     }
-    
-    func commitComposition()async->Bool{
-        await engine.commitComposition(session: self.id)
+
+    public func commitComposition() async -> Bool {
+        await engine.commitComposition(for: sessionID)
     }
-    
-    func clearComposition()async{
-        await engine.clearComposition(session: self.id)
-    }
-}
 
-fileprivate extension RimeEngine {
-
-    func createSession() -> RimeSessionId {
-        RimeSessionId(id: rimeApi.create_session())
-	}
-
-    func findSession(id: RimeSessionId) -> Bool {
-        rimeApi.find_session(id.id)
-	}
-
-    func destroySession(id: RimeSessionId) -> Bool {
-        rimeApi.destroy_session(id.id)
-	}
-
-    func cleanupStaleSessions() {
-		rimeApi.cleanup_stale_sessions()
-	}
-
-    func cleanupAllSessions() {
-		rimeApi.cleanup_all_sessions()
-	}
-}
-
-
-fileprivate extension RimeEngine {
-    func processKey(session: RimeSessionId, keycode:CInt,  mask:CInt)->Bool{
-        rimeApi.process_key(session.id, keycode, mask)
-    }
-    
-    func commitComposition(session: RimeSessionId)->Bool{
-        rimeApi.commit_composition(session.id)
-    }
-    
-    func clearComposition(session: RimeSessionId){
-        rimeApi.clear_composition(session.id)
-        
+    public func clearComposition() async {
+        await engine.clearComposition(for: sessionID)
     }
 }
 
+extension RimeEngine {
+    fileprivate func createSession() -> RimeSessionID {
+        RimeSessionID(rawValue: UInt(rimeApi.create_session()))
+    }
+
+    fileprivate func findSession(with sessionID: RimeSessionID) -> Bool {
+        rimeApi.find_session(sessionID.rawValue)
+    }
+
+    fileprivate func destroySession(with sessionID: RimeSessionID) -> Bool {
+        rimeApi.destroy_session(sessionID.rawValue)
+    }
+
+    fileprivate func cleanupStaleSessions() {
+        rimeApi.cleanup_stale_sessions()
+    }
+
+    fileprivate func cleanupAllSessions() {
+        rimeApi.cleanup_all_sessions()
+    }
+}
+
+extension RimeEngine {
+    fileprivate func processKey(for sessionID: RimeSessionID, keyCode: CInt, modifierMask: CInt)
+        -> Bool
+    {
+        rimeApi.process_key(sessionID.rawValue, keyCode, modifierMask)
+    }
+
+    fileprivate func commitComposition(for sessionID: RimeSessionID) -> Bool {
+        rimeApi.commit_composition(sessionID.rawValue)
+    }
+
+    fileprivate func clearComposition(for sessionID: RimeSessionID) {
+        rimeApi.clear_composition(sessionID.rawValue)
+    }
+}

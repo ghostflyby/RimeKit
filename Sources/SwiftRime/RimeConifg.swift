@@ -7,7 +7,7 @@ private struct rime_config_wrapper: @unchecked Sendable {
 public class RimeConfig: @unchecked Sendable {
     init(engine: RimeEngine) async {
         self.engine = engine
-        self.wrapper = await engine.configInit()
+        self.wrapper = await engine.makeConfigWrapper()
     }
 
     fileprivate let wrapper: rime_config_wrapper
@@ -26,17 +26,18 @@ public class RimeConfig: @unchecked Sendable {
 }
 
 extension RimeEngine {
-    public func open(schemaId: String) -> RimeConfig? {
+    public func openSchema(_ schemaID: String) -> RimeConfig? {
         var config: rime_config_t = rime_config_t()
-        return if rimeApi.schema_open(schemaId, &config) {
+        return if rimeApi.schema_open(schemaID, &config) {
             RimeConfig(ptr: config, engine: self)
         } else {
             nil
         }
     }
-    public func open(configId: String) -> RimeConfig? {
+
+    public func openConfig(_ configID: String) -> RimeConfig? {
         var config: rime_config_t = rime_config_t()
-        return if rimeApi.config_open(configId, &config) {
+        return if rimeApi.config_open(configID, &config) {
             RimeConfig(ptr: config, engine: self)
         } else {
             nil
@@ -77,7 +78,7 @@ extension RimeConfig {
     }
 
     public func remove(forKey key: String) async -> Bool {
-        await engine.remove(forKey: key, in: self)
+        await engine.removeValue(forKey: key, in: self)
     }
 }
 
@@ -159,27 +160,27 @@ extension RimeEngine {
         var value = value.wrapper.raw
         return rimeApi.config_set_item(&config, key, &value)
     }
-    public func remove(forKey key: String, in config: borrowing RimeConfig) -> Bool {
+    public func removeValue(forKey key: String, in config: borrowing RimeConfig) -> Bool {
         var config = config.wrapper.raw
         return rimeApi.config_clear(&config, key)
     }
 
-    public func configCreateList(config: borrowing RimeConfig, key: String) -> Bool {
+    public func createList(forKey key: String, in config: borrowing RimeConfig) -> Bool {
         var config = config.wrapper.raw
         return rimeApi.config_create_list(&config, key)
     }
 
-    public func configCreateMap(config: borrowing RimeConfig, key: String) -> Bool {
+    public func createMap(forKey key: String, in config: borrowing RimeConfig) -> Bool {
         var config = config.wrapper.raw
         return rimeApi.config_create_map(&config, key)
     }
 
-    public func configListSize(config: borrowing RimeConfig, key: String) -> Int {
+    public func listSize(forKey key: String, in config: borrowing RimeConfig) -> Int {
         var config = config.wrapper.raw
         return rimeApi.config_list_size(&config, key)
     }
 
-    fileprivate func configInit() -> rime_config_wrapper {
+    fileprivate func makeConfigWrapper() -> rime_config_wrapper {
         var config = rime_config_t()
         _ = rimeApi.config_init(&config)
         return rime_config_wrapper(raw: config)
