@@ -47,6 +47,17 @@ extension RimeEngine {
             return nil
         }
     }
+
+    public func openUserConfig(configId: String) async -> ObjectHandle<RimeConfig>? {
+        var config: rime_config_t = rime_config_t()
+        if rimeApi.user_config_open(configId, &config) {
+            let handle = ObjectHandle<RimeConfig>()
+            configs[handle] = config
+            return handle
+        } else {
+            return nil
+        }
+    }
 }
 
 extension RimeConfig {
@@ -244,11 +255,18 @@ extension RimeEngine {
     }
 
     public func advanceConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>)
-        async// -> ObjectHandle<RimeConfig>?
+        async -> RimeConfigLocation?
     {
         var rime_iterator = configIterators[iterator]!
-        _ = rimeApi.config_next(&rime_iterator)
-        configIterators[iterator] = rime_iterator
+        if rimeApi.config_next(&rime_iterator) {
+            configIterators[iterator] = rime_iterator
+            return RimeConfigLocation(
+                index: rime_iterator.index,
+                key: rime_iterator.key.map { String(cString: $0) },
+                path: rime_iterator.path.map { String(cString: $0) }
+            )
+        }
+        return nil
     }
 
     public func endConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) async {

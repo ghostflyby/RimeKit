@@ -81,6 +81,7 @@ public protocol Rime: Sendable {
     func beginList(forKey key: String, in config: borrowing ObjectHandle<RimeConfig>) async
         -> ObjectHandle<RimeConfigIterator>
     func advanceConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) async
+        -> RimeConfigLocation?
     func endConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) async
 
     func makeConfig() async -> ObjectHandle<RimeConfig>
@@ -103,9 +104,7 @@ public protocol Rime: Sendable {
     func selectCandidate(at index: Int, for session: RimeSessionID) async -> Bool
     func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async -> Bool
 
-    func beginCandidates(for session: RimeSessionID) async -> (
-        ObjectHandle<RimeCandidateIterator>, RimeCandidate
-    )
+    func beginCandidates(for session: RimeSessionID) async -> ObjectHandle<RimeCandidateIterator>
     func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async
         -> RimeCandidate?
     func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async
@@ -119,8 +118,8 @@ public protocol Rime: Sendable {
     func openUserConfig(configId: String) async -> ObjectHandle<RimeConfig>?
 
     func candidateList(
-        fromIndex: Int, for sessionID: RimeSessionID
-    ) async -> (ObjectHandle<RimeCandidateIterator>, RimeCandidate)?
+        fromIndex: Int32, for sessionID: RimeSessionID
+    ) async -> ObjectHandle<RimeCandidateIterator>?
 
     func stateLabel(for key: String, state: RimeState, in session: RimeSessionID) async -> String?
     func stateLabel(

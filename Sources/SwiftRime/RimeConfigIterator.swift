@@ -1,16 +1,34 @@
-// TODO: - RimeConfigIterator
-public struct RimeConfigIterator: AsyncIteratorProtocol, Sendable {
+public struct RimeConfigLocation: Codable, Sendable {
+	let index: Int32
+	let key: String?
+	let path: String?
+}
+
+public class RimeConfigIterator: AsyncIteratorProtocol {
 	internal let handle: ObjectHandle<RimeConfigIterator>
 	internal let engine: any Rime
 
-	public mutating func next() async throws -> RimeConfig? {
-		nil
+	internal init(handle: ObjectHandle<RimeConfigIterator>, engine: any Rime) {
+		self.handle = handle
+		self.engine = engine
 	}
 
-	public mutating func next(isolation actor: isolated (any Actor)?) async
-		-> RimeConfig?
+	public func next() async throws -> RimeConfigLocation? {
+		await engine.advanceConfigIterator(handle)
+	}
+
+	public func next(isolation actor: isolated (any Actor)?) async
+		-> RimeConfigLocation?
 	{
-		nil
+		await engine.advanceConfigIterator(handle)
+	}
+
+	deinit {
+		let ptr = handle
+		let engine = engine
+		Task.detached {
+			await engine.endConfigIterator(ptr)
+		}
 	}
 
 }
