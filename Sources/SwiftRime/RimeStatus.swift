@@ -11,7 +11,7 @@ public struct RimeStatus: Sendable, Codable {
     let isTraditional: Bool
     let isASCIIPunctuation: Bool
 
-    fileprivate init(rawValue: rime_status_t_stdbool, engine _: RimeEngine) {
+    fileprivate init(rawValue: rime_status_t_stdbool) {
         schemaID = String(cString: rawValue.schema_id)
         schemaName = String(cString: rawValue.schema_name)
         isDisabled = rawValue.is_disabled
@@ -33,12 +33,12 @@ extension RimeSession {
 }
 
 extension RimeEngine {
-    fileprivate func status(for sessionID: RimeSessionID) -> RimeStatus? {
+    public func status(for sessionID: RimeSessionID) -> RimeStatus? {
         var status = rime_status_t_stdbool.rimeStructInit()
         defer { _ = rimeApi.free_status(&status) }
         guard rimeApi.get_status(sessionID.rawValue, &status) else {
             return nil
         }
-        return RimeStatus(rawValue: status, engine: self)
+        return RimeStatus(rawValue: status)
     }
 }

@@ -19,18 +19,18 @@ extension RimeSession {
 }
 
 extension RimeCommit {
-    fileprivate init(rawValue: rime_commit_t, engine _: RimeEngine) {
+    fileprivate init(rawValue: rime_commit_t) {
         text = String(cString: rawValue.text)
     }
 }
 
 extension RimeEngine {
-    fileprivate func commit(for sessionID: RimeSessionID) -> RimeCommit? {
+    public func commit(for sessionID: RimeSessionID) -> RimeCommit? {
         var commit = rime_commit_t.rimeStructInit()
         defer { _ = rimeApi.free_commit(&commit) }
         guard rimeApi.get_commit(sessionID.rawValue, &commit) else {
             return nil
         }
-        return RimeCommit(rawValue: commit, engine: self)
+        return RimeCommit(rawValue: commit)
     }
 }

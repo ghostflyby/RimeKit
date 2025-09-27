@@ -33,7 +33,7 @@ extension RimeEngine {
         return RimeSchemaList(schemaList)
     }
 
-    fileprivate func currentSchema(for sessionID: RimeSessionID) -> String? {
+    public func currentSchema(for sessionID: RimeSessionID) -> String? {
         let bufferSize = 1024
         let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
         return buffer.withUnsafeBufferPointer { pointer in
@@ -50,7 +50,7 @@ extension RimeEngine {
         }
     }
 
-    fileprivate func selectSchema(_ schemaID: String, for sessionID: RimeSessionID) -> Bool {
+    public func selectSchema(_ schemaID: String, for sessionID: RimeSessionID) -> Bool {
         rimeApi.select_schema(sessionID.rawValue, schemaID)
     }
 }

@@ -1,4 +1,5 @@
 import CLibrime
+import Foundation
 
 typealias RimeContextRaw = CLibrime.rime_context_t_stdbool
 
@@ -8,7 +9,7 @@ public struct RimeContext: Sendable, Codable {
     let commitTextPreview: String
     let selectLabels: [String]
 
-    fileprivate init(rawValue: RimeContextRaw, engine _: RimeEngine) {
+    fileprivate init(rawValue: RimeContextRaw) {
         composition = RimeComposition(rawValue.composition)
         menu = RimeMenu(rawValue.menu)
         commitTextPreview = String(cString: rawValue.commit_text_preview)
@@ -25,13 +26,13 @@ extension RimeSession {
 }
 
 extension RimeEngine {
-    fileprivate func context(for sessionID: RimeSessionID) -> RimeContext? {
+    public func context(for sessionID: RimeSessionID) -> RimeContext? {
         var context = RimeContextRaw.rimeStructInit()
         defer { _ = rimeApi.free_context(&context) }
         guard rimeApi.get_context(sessionID.rawValue, &context) else {
             return nil
         }
-        return RimeContext(rawValue: context, engine: self)
+        return RimeContext(rawValue: context)
     }
 }
 
@@ -84,5 +85,89 @@ extension RimeMenu {
         let numCandidates = Int(cStruct.num_candidates)
         let buffer = UnsafeBufferPointer(start: cStruct.candidates, count: numCandidates)
         candidates = buffer.map { RimeCandidate($0) }
+    }
+}
+
+extension RimeEngine {
+    public func selectCandidate(at index: Int, for session: RimeSessionID) async -> Bool {
+        return rimeApi.select_candidate(session.rawValue, index)
+    }
+    public func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async
+        -> Bool
+    {
+        return rimeApi.select_candidate_on_current_page(session.rawValue, index)
+    }
+
+    public func beginCandidates(for session: RimeSessionID) async -> (
+        ObjectHandle<RimeCandidateIterator>, RimeCandidate
+    ) {
+        let handle = ObjectHandle<RimeCandidateIterator>()
+        var iterator = rime_candidate_list_iterator_t()
+        _ = rimeApi.candidate_list_begin(session.rawValue, &iterator)
+        return (handle, RimeCandidate(iterator.candidate))
+    }
+
+    public func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async
+        -> RimeCandidate?
+    {
+        var iter = candidateIterators[iterator]!
+        if rimeApi.candidate_list_next(&iter) {
+            candidateIterators[iterator] = iter
+            return RimeCandidate(iter.candidate)
+        } else {
+            return nil
+        }
+    }
+
+    public func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async {
+        if var iter = candidateIterators.removeValue(forKey: iterator) {
+            rimeApi.candidate_list_end(&iter)
+        }
+    }
+
+    public func stateLabel(for key: String, state: RimeState, in session: RimeSessionID) async
+        -> String?
+    {
+        guard let cStr = rimeApi.get_state_label(session.rawValue, key, state == .on) else {
+            return nil
+        }
+        return String(cString: cStr)
+    }
+
+    public func stateLabel(
+        for key: String, state: RimeState, abbreviated: Bool, in session: RimeSessionID
+    ) async -> String? {
+        let slice = rimeApi.get_state_label_abbreviated(
+            session.rawValue, key, state == .on, abbreviated)
+        guard let bytes = slice.str else {
+            return nil
+        }
+        let length = slice.length
+        let data = Data(bytes: bytes, count: Int(length))
+        return String(data: data, encoding: .utf8)
+    }
+
+    public func removeCandidate(at index: Int, for session: RimeSessionID) async -> Bool {
+        return rimeApi.delete_candidate(session.rawValue, index)
+    }
+
+    public func removeCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async
+        -> Bool
+    {
+        return rimeApi.delete_candidate_on_current_page(session.rawValue, index)
+    }
+
+    public func highlightCandidate(at index: Int, for session: RimeSessionID) async -> Bool {
+        return rimeApi.highlight_candidate(session.rawValue, index)
+    }
+
+    public func highlightCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async
+        -> Bool
+    {
+        return rimeApi.highlight_candidate_on_current_page(session.rawValue, index)
+    }
+
+    public func page(_ direction: RimePageDirection, for session: RimeSessionID) async -> Bool {
+        return rimeApi.change_page(session.rawValue, direction == .forward)
     }
 }

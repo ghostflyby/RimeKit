@@ -1,7 +1,7 @@
 import CLibrime
 import Foundation
 
-public typealias RimeNotificationHandler = (RimeSessionID, RimeNotificationType, String) -> Void
+public typealias RimeNotificationHandler = @Sendable (RimeSessionID, RimeNotificationType, String) -> Void
 
 final class Box {
     let body: RimeNotificationHandler
@@ -51,18 +51,22 @@ extension RimeEngine {
         get { opaque?.body }
         set {
             if let newValue {
-                setNotificationHandler(newValue)
+                setNotificationHandler(handler: newValue)
             } else {
                 cancelNotificationHandler()
             }
         }
     }
 
-    private func setNotificationHandler(_ closure: @escaping RimeNotificationHandler) {
+    private func setNotificationHandler(handler closure: @escaping RimeNotificationHandler) {
         let box = Box(closure)
         let context = Unmanaged.passUnretained(box).toOpaque()
         rimeApi.set_notification_handler(thunk, context)
         opaque = box
+    }
+
+    public func setNotificationHandler(_ handler: @escaping RimeNotificationHandler) async {
+        setNotificationHandler(handler: handler)
     }
 
     private func cancelNotificationHandler() {

@@ -1,10 +1,18 @@
 import CLibrime
+import Distributed
 
-public final actor RimeEngine {
+public final actor RimeEngine: Rime {
     nonisolated public static let shared = RimeEngine()
 
-    let rimeApi: RimeApi_stdbool
-    var opaque: Box?
+    internal let rimeApi: RimeApi_stdbool
+    internal var opaque: Box?
+    internal static let cStringBufferSize = 1024
+    internal var cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
+
+    internal var configs: [ObjectHandle<RimeConfig>: rime_config_t] = [:]
+    internal var configIterators: [ObjectHandle<RimeConfigIterator>: rime_config_iterator_t] = [:]
+    internal var candidateIterators:
+        [ObjectHandle<RimeCandidateIterator>: rime_candidate_list_iterator_t] = [:]
 
     private init() {
         rimeApi = rime_get_api_stdbool().pointee
@@ -18,7 +26,13 @@ public final actor RimeEngine {
         self.init(raw: UnsafeRawPointer(pointer))
     }
 
-    public func initialize(with traits: borrowing RimeTraits) {
+    public func setup(with traits: RimeTraits) async {
+        var t = rime_traits_t.rimeStructInit()
+        _ = traits.toCStructure(&t)
+        rimeApi.setup(&t)
+    }
+
+    public func initialize(with traits: borrowing RimeTraits) async {
         var t = rime_traits_t.rimeStructInit()
         _ = traits.toCStructure(&t)
         rimeApi.initialize(&t)
@@ -44,15 +58,15 @@ extension RimeEngine {
 }
 
 extension RimeEngine {
-    func option(named option: String, for sessionID: RimeSessionID) -> Bool {
+    public func option(named option: String, for sessionID: RimeSessionID) -> Bool {
         rimeApi.get_option(sessionID.rawValue, option)
     }
 
-    func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID) {
+    public func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID) {
         rimeApi.set_option(sessionID.rawValue, option, value)
     }
 
-    func property(named property: String, for sessionID: RimeSessionID) -> String? {
+    public func property(named property: String, for sessionID: RimeSessionID) -> String? {
         let bufferSize = 1024
         let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
         return buffer.withUnsafeBufferPointer { pointer in
@@ -70,25 +84,76 @@ extension RimeEngine {
         }
     }
 
-    func setProperty(_ property: String, value: String, for sessionID: RimeSessionID) {
+    public func setProperty(_ property: String, value: String, for sessionID: RimeSessionID) {
         rimeApi.set_property(sessionID.rawValue, property, value)
     }
 }
 
-extension RimeSession {
-    public func option(named option: String) async -> Bool {
-        await engine.option(named: option, for: sessionID)
+extension RimeEngine {
+    public var userID: String {
+        String(cString: rimeApi.get_user_id()!)
     }
 
-    public func setOption(_ option: String, value: Bool) async {
-        await engine.setOption(option, value: value, for: sessionID)
+    public var version: String {
+        String(cString: rimeApi.get_version()!)
     }
 
-    public func property(named property: String) async -> String? {
-        await engine.property(named: property, for: sessionID)
+    public var userDataSyncDirectory: String {
+        rimeApi.get_user_data_sync_dir(cStringBuffer, RimeEngine.cStringBufferSize)
+        return String(cString: cStringBuffer)
     }
 
-    public func setProperty(_ property: String, value: String) async {
-        await engine.setProperty(property, value: value, for: sessionID)
+    public var sharedDataDirectory: String {
+        rimeApi.get_shared_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+        return String(cString: cStringBuffer)
+    }
+
+    public var userDataDirectory: String {
+        rimeApi.get_user_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+        return String(cString: cStringBuffer)
+    }
+
+    public var prebuiltDataDirectory: String {
+        rimeApi.get_prebuilt_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+        return String(cString: cStringBuffer)
+    }
+
+    public var stagingDirectory: String {
+        rimeApi.get_staging_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+        return String(cString: cStringBuffer)
+    }
+
+    public var syncDirectory: String {
+        rimeApi.get_sync_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+        return String(cString: cStringBuffer)
+    }
+
+}
+
+extension RimeEngine {
+    public func initializeDeployer(with traits: RimeTraits) async {
+        var t = rime_traits_t.rimeStructInit()
+        _ = traits.toCStructure(&t)
+        rimeApi.deployer_initialize(&t)
+    }
+
+    public func prebuild() async -> Bool {
+        rimeApi.prebuild()
+    }
+
+    public func deploy() async -> Bool {
+        rimeApi.deploy()
+    }
+
+    public func deploySchema(withID schemaID: String) async -> Bool {
+        rimeApi.deploy_schema(schemaID)
+    }
+
+    public func deployConfig(filename: String, versionKey: String) async -> Bool {
+        rimeApi.deploy_config_file(filename, versionKey)
+    }
+
+    public func syncUserData() async -> Bool {
+        rimeApi.sync_user_data()
     }
 }
