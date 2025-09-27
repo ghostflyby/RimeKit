@@ -35,29 +35,23 @@ public class RimeConfigIterator: AsyncIteratorProtocol {
 
 public class RimeCandidateIterator: AsyncIteratorProtocol {
 	internal init(
-		handle: ObjectHandle<RimeCandidateIterator>, value: RimeCandidate? = nil, engine: any Rime
+		handle: ObjectHandle<RimeCandidateIterator>, engine: any Rime
 	) {
 		self.handle = handle
-		self.value = value
 		self.engine = engine
 	}
 
 	internal let handle: ObjectHandle<RimeCandidateIterator>
-	internal var value: RimeCandidate?
 	internal let engine: any Rime
 
 	public func next() async throws -> RimeCandidate? {
-		let candidate = value
-		self.value = await engine.advanceCandidateIterator(handle)
-		return candidate
+		await engine.advanceCandidateIterator(handle)
 	}
 
 	public func next(isolation actor: isolated (any Actor)?) async
 		-> RimeCandidate?
 	{
-		let candidate = value
-		self.value = await engine.advanceCandidateIterator(handle)
-		return candidate
+		await engine.advanceCandidateIterator(handle)
 	}
 
 	deinit {
