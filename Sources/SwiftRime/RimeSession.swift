@@ -28,7 +28,7 @@ public struct RimeSession: ~Copyable {
     deinit {
         let engine = engine
         let sessionID = sessionID
-        Task {
+        Task.detached {
             await engine.destroySession(with: sessionID)
         }
     }
