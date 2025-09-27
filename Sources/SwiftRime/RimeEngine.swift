@@ -7,7 +7,7 @@ public final actor RimeEngine: Rime {
     internal let rimeApi: RimeApi_stdbool
     internal var opaque: Box?
     internal static let cStringBufferSize = 1024
-    internal var cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
+    internal let cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
 
     internal var configs: [ObjectHandle<RimeConfig>: rime_config_t] = [:]
     internal var configIterators: [ObjectHandle<RimeConfigIterator>: rime_config_iterator_t] = [:]
