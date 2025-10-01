@@ -10,8 +10,8 @@ public struct ObjectHandle<T: ~Copyable>: Sendable, Codable, Hashable {
 
 final public class RimeConfig: Sendable {
 
-    fileprivate let handle: ObjectHandle<RimeConfig>
-    fileprivate let engine: any Rime
+    internal let handle: ObjectHandle<RimeConfig>
+    internal let engine: any Rime
     fileprivate init(handle: ObjectHandle<RimeConfig>, engine: any Rime) {
         self.handle = handle
         self.engine = engine
@@ -19,7 +19,7 @@ final public class RimeConfig: Sendable {
     deinit {
         let ptr = handle
         let engine = engine
-        Task.detached {
+        Task {
             await engine.close(config: ptr)
         }
     }
