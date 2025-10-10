@@ -123,3 +123,20 @@ extension RimeEngine {
   }
 
 }
+
+extension RimeSession {
+
+  public var input: String? {
+    get async { await engine.input(for: sessionID) }
+  }
+  public func set(input: String) async -> Bool {
+    await engine.set(input: input, for: sessionID)
+  }
+
+  public var caretPosition: Int {
+    get async { await engine.caretPosition(for: sessionID) }
+  }
+  public func set(caretPosition: Int) async {
+    await engine.set(caretPosition: caretPosition, for: sessionID)
+  }
+}
