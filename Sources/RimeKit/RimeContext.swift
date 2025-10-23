@@ -99,15 +99,15 @@ extension RimeEngine {
   }
 
   public func beginCandidates(for session: RimeSessionID) async -> ObjectHandle<
-    RimeCandidateIterator
+    RimeCandidate
   > {
-    let handle = ObjectHandle<RimeCandidateIterator>()
+    let handle = ObjectHandle<RimeCandidate>()
     var iterator = rime_candidate_list_iterator_t()
     _ = rimeApi.candidate_list_begin(session.rawValue, &iterator)
     return handle
   }
 
-  public func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async
+  public func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) async
     -> RimeCandidate?
   {
     var iter = candidateIterators[iterator]!
@@ -119,16 +119,16 @@ extension RimeEngine {
     }
   }
 
-  public func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async {
+  public func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) async {
     if var iter = candidateIterators.removeValue(forKey: iterator) {
       rimeApi.candidate_list_end(&iter)
     }
   }
 
   public func candidateList(fromIndex: Int32, for sessionID: RimeSessionID) async -> ObjectHandle<
-    RimeCandidateIterator
+    RimeCandidate
   >? {
-    let handle = ObjectHandle<RimeCandidateIterator>()
+    let handle = ObjectHandle<RimeCandidate>()
     var iterator = rime_candidate_list_iterator_t()
     _ = rimeApi.candidate_list_from_index(sessionID.rawValue, &iterator, fromIndex)
     return handle

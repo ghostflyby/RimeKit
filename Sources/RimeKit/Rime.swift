@@ -104,10 +104,10 @@ public protocol Rime: Sendable {
   func selectCandidate(at index: Int, for session: RimeSessionID) async -> Bool
   func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async -> Bool
 
-  func beginCandidates(for session: RimeSessionID) async -> ObjectHandle<RimeCandidateIterator>
-  func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async
+  func beginCandidates(for session: RimeSessionID) async -> ObjectHandle<RimeCandidate>
+  func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) async
     -> RimeCandidate?
-  func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidateIterator>) async
+  func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) async
 
   //   Bool (*user_config_open)(const char* config_id, RimeConfig* config);
 
@@ -119,7 +119,7 @@ public protocol Rime: Sendable {
 
   func candidateList(
     fromIndex: Int32, for sessionID: RimeSessionID
-  ) async -> ObjectHandle<RimeCandidateIterator>?
+  ) async -> ObjectHandle<RimeCandidate>?
 
   func stateLabel(for key: String, state: RimeState, in session: RimeSessionID) async -> String?
   func stateLabel(

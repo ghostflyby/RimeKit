@@ -11,8 +11,8 @@ public final actor RimeEngine: Rime {
 
   internal var configs: [ObjectHandle<RimeConfig>: rime_config_t] = [:]
   internal var configIterators: [ObjectHandle<RimeConfigIterator>: rime_config_iterator_t] = [:]
-  internal var candidateIterators:
-    [ObjectHandle<RimeCandidateIterator>: rime_candidate_list_iterator_t] = [:]
+  internal var candidateIterators: [ObjectHandle<RimeCandidate>: rime_candidate_list_iterator_t] =
+    [:]
 
   private init() {
     rimeApi = rime_get_api_stdbool().pointee
