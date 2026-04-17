@@ -1,4 +1,4 @@
-import CLibrime
+import RimeDynamic
 
 public struct RimeCommit: Sendable, Codable {
   public let text: String

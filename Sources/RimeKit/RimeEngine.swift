@@ -1,5 +1,5 @@
-import CLibrime
 import Distributed
+import RimeDynamic
 
 public final actor RimeEngine: Rime {
   nonisolated public static let shared = RimeEngine()

@@ -1,5 +1,5 @@
-import CLibrime
 import Foundation
+import RimeDynamic
 
 public protocol Rime: Sendable {
   func setup(with traits: RimeTraits) async

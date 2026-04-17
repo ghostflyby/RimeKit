@@ -1,4 +1,4 @@
-import CLibrime
+import RimeDynamic
 
 /// The configuration for initializing RimeEngine.
 public struct RimeTraits: Sendable, Codable {

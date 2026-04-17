@@ -1,4 +1,4 @@
-import CLibrime
+import RimeDynamic
 
 public struct RimeStatus: Sendable, Codable {
   let schemaID: String

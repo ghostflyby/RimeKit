@@ -1,7 +1,7 @@
-import CLibrime
 import Foundation
+import RimeDynamic
 
-typealias RimeContextRaw = CLibrime.rime_context_t_stdbool
+typealias RimeContextRaw = RimeDynamic.rime_context_t_stdbool
 
 public struct RimeContext: Sendable, Codable {
   let composition: RimeComposition
@@ -45,7 +45,7 @@ public struct RimeComposition: Sendable, Codable {
 }
 
 extension RimeComposition {
-  fileprivate init(_ cStruct: CLibrime.RimeComposition) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeComposition) {
     length = cStruct.length
     cursorPosition = cStruct.cursor_pos
     selectionStart = cStruct.sel_start
@@ -60,7 +60,7 @@ public struct RimeCandidate: Sendable, Codable {
 }
 
 extension RimeCandidate {
-  fileprivate init(_ cStruct: CLibrime.RimeCandidate) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeCandidate) {
     text = String(cString: cStruct.text)
     comment = String(cString: cStruct.comment)
   }
@@ -76,7 +76,7 @@ public struct RimeMenu: Sendable, Codable {
 }
 
 extension RimeMenu {
-  fileprivate init(_ cStruct: CLibrime.RimeMenu_stdbool) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeMenu_stdbool) {
     pageSize = cStruct.page_size
     pageNumber = cStruct.page_no
     isLastPage = cStruct.is_last_page

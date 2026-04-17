@@ -1,5 +1,5 @@
-import CLibrime
 import Foundation
+import RimeDynamic
 
 public typealias RimeNotificationHandler =
   @Sendable (RimeSessionID, RimeNotificationType, String) -> Void
@@ -14,7 +14,7 @@ final class Box {
 
 private func thunk(
   context: UnsafeMutableRawPointer?,
-  session: CLibrime.RimeSessionId,
+  session: RimeDynamic.RimeSessionId,
   type: UnsafePointer<CChar>?,
   value: UnsafePointer<CChar>?
 ) {

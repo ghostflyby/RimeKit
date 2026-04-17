@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
   name: "RimeKit",
   platforms: [
-    .macOS(.v11),
+    .macOS(.v13),
     .iOS(.v15),
   ],
   products: [
@@ -15,21 +15,19 @@ let package = Package(
       name: "RimeKit",
       targets: ["RimeKit"])
   ],
+  dependencies: [
+    .package(
+      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.16.1-pack.8",
+      // traits: [.trait(name: "dynamic")]
+    )
+  ],
   targets: [
-    // Targets are the basic building blocks of a package, defining a module or a test suite.
-    // Targets can depend on other targets in this package and products from dependencies.
-    .systemLibrary(
-      name: "CLibrime",
-      path: "Sources/CLibrime",
-      pkgConfig: "rime",
-      providers: [
-        .brew(["librime"]),
-        .apt(["librime"]),
-      ],
-    ),
     .target(
       name: "RimeKit",
-      dependencies: ["CLibrime"]),
+      dependencies: [
+        .product(
+          name: "RimeDynamic", package: "librime-xcframework")
+      ]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: ["RimeKit"]

@@ -1,5 +1,5 @@
-import CLibrime
 import Foundation
+import RimeDynamic
 
 public struct ObjectHandle<T: ~Copyable>: Sendable, Codable, Hashable {
   private let rawValue: UUID

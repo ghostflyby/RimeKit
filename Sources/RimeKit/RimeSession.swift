@@ -1,6 +1,6 @@
-import CLibrime
 import Darwin
 import Foundation
+import RimeDynamic
 
 public struct RimeSessionID: Sendable, Codable, RawRepresentable {
   public let rawValue: UInt

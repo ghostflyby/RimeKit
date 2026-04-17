@@ -1,4 +1,4 @@
-import CLibrime
+import RimeDynamic
 
 public struct RimeSchemaListItem: Sendable, Codable {
   let schemaID: String
@@ -6,7 +6,7 @@ public struct RimeSchemaListItem: Sendable, Codable {
 }
 
 extension RimeSchemaListItem {
-  fileprivate init(_ cStruct: CLibrime.RimeSchemaListItem) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeSchemaListItem) {
     schemaID = String(cString: cStruct.schema_id)
     name = String(cString: cStruct.name)
   }
@@ -17,7 +17,7 @@ public struct RimeSchemaList: Sendable, Codable {
 }
 
 extension RimeSchemaList {
-  fileprivate init(_ cStruct: CLibrime.RimeSchemaList) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeSchemaList) {
     let buffer = UnsafeBufferPointer(start: cStruct.list, count: Int(cStruct.size))
     items = buffer.map { RimeSchemaListItem($0) }
   }
