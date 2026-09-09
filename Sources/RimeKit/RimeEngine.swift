@@ -1,6 +1,11 @@
 import RimeDynamic
 
-public final class RimeEngine: @unchecked Sendable {
+/// librime 的进程内引擎(内部实现细节)。
+///
+/// 串行化约定(§3.7 单一执行域):macOS 上由 `RimeServiceRoot` 分布式 actor
+/// 的执行器独占调用;其他平台宿主需自行在单一队列/actor 上收敛调用。
+/// 不作为公开 API——公开入口是 `RimeSession`(进程内)与 `RimeServiceRoot`(XPC)。
+final class RimeEngine: @unchecked Sendable {
   public static let shared = RimeEngine()
 
   internal let rimeApi: RimeApi_stdbool

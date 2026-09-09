@@ -14,12 +14,17 @@ public struct RimeSession: ~Copyable {
   internal let sessionID: RimeSessionID
   internal let engine: RimeEngine
 
-  public init(engine: RimeEngine) throws(RimeError) {
+  /// 进程内公开工厂:绑定共享引擎(iOS/进程内路径的公开入口)。
+  public init() throws(RimeError) {
+    try self.init(engine: .shared)
+  }
+
+  init(engine: RimeEngine) throws(RimeError) {
     self.sessionID = try engine.createSession()
     self.engine = engine
   }
 
-  public init?(engine: RimeEngine, sessionID: RimeSessionID) throws(RimeError) {
+  init?(engine: RimeEngine, sessionID: RimeSessionID) throws(RimeError) {
     guard try engine.findSession(with: sessionID) else { return nil }
     self.sessionID = sessionID
     self.engine = engine
