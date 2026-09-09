@@ -25,15 +25,17 @@ extension RimeSchemaList {
 
 extension RimeEngine {
   public var schemaList: RimeSchemaList {
+    get throws(RimeError) {
     var schemaList = rime_schema_list_t()
     defer { rimeApi.free_schema_list(&schemaList) }
     guard rimeApi.get_schema_list(&schemaList) else {
       return RimeSchemaList(items: [])
     }
     return RimeSchemaList(schemaList)
+    }
   }
 
-  public func currentSchema(for sessionID: RimeSessionID) -> String? {
+  public func currentSchema(for sessionID: RimeSessionID) throws(RimeError) -> String? {
     let bufferSize = 1024
     let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
     return buffer.withUnsafeBufferPointer { pointer in
@@ -50,29 +52,29 @@ extension RimeEngine {
     }
   }
 
-  public func selectSchema(_ schemaID: String, for sessionID: RimeSessionID) -> Bool {
+  public func selectSchema(_ schemaID: String, for sessionID: RimeSessionID) throws(RimeError) -> Bool {
     rimeApi.select_schema(sessionID.rawValue, schemaID)
   }
 }
 
 extension RimeSession {
   public var schemaList: RimeSchemaList {
-    get async {
-      await engine.schemaList
+    get throws(RimeError) {
+      try engine.schemaList
     }
   }
 
   public var schemas: [RimeSchemaListItem] {
-    get async {
-      await engine.schemaList.items
+    get throws(RimeError) {
+      try engine.schemaList.items
     }
   }
 
-  public func selectSchema(id schemaID: String) async -> Bool {
-    await engine.selectSchema(schemaID, for: sessionID)
+  public func selectSchema(id schemaID: String) throws(RimeError) -> Bool {
+    try engine.selectSchema(schemaID, for: sessionID)
   }
 
-  public func select(schema: RimeSchemaListItem) async -> Bool {
-    await engine.selectSchema(schema.schemaID, for: sessionID)
+  public func select(schema: RimeSchemaListItem) throws(RimeError) -> Bool {
+    try engine.selectSchema(schema.schemaID, for: sessionID)
   }
 }

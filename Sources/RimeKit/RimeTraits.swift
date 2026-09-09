@@ -2,17 +2,43 @@ import RimeDynamic
 
 /// The configuration for initializing RimeEngine.
 public struct RimeTraits: Sendable, Codable {
-  var sharedDataDir: String
-  var userDataDir: String
-  var distributionName: String
-  var distributionCodeName: String
-  var distributionVersion: String
-  var appName: String
-  var modules: [String] = []
-  var minLogLevel: RimeLogLevel = .info
-  var logDir: String? = nil
-  var prebuiltDataDir: String? = nil
-  var stagingDir: String? = nil
+  public var sharedDataDir: String
+  public var userDataDir: String
+  public var distributionName: String
+  public var distributionCodeName: String
+  public var distributionVersion: String
+  public var appName: String
+  public var modules: [String] = []
+  public var minLogLevel: RimeLogLevel = .info
+  public var logDir: String? = nil
+  public var prebuiltDataDir: String? = nil
+  public var stagingDir: String? = nil
+
+  public init(
+    sharedDataDir: String,
+    userDataDir: String,
+    distributionName: String,
+    distributionCodeName: String,
+    distributionVersion: String,
+    appName: String,
+    modules: [String] = [],
+    minLogLevel: RimeLogLevel = .info,
+    logDir: String? = nil,
+    prebuiltDataDir: String? = nil,
+    stagingDir: String? = nil
+  ) {
+    self.sharedDataDir = sharedDataDir
+    self.userDataDir = userDataDir
+    self.distributionName = distributionName
+    self.distributionCodeName = distributionCodeName
+    self.distributionVersion = distributionVersion
+    self.appName = appName
+    self.modules = modules
+    self.minLogLevel = minLogLevel
+    self.logDir = logDir
+    self.prebuiltDataDir = prebuiltDataDir
+    self.stagingDir = stagingDir
+  }
 }
 
 struct RimeTraitsReleaseHandle: ~Copyable {
@@ -28,8 +54,8 @@ struct RimeTraitsReleaseHandle: ~Copyable {
     }
   }
 
-  fileprivate mutating func add(_ string: String?) -> UnsafePointer<CChar> {
-    guard let string else { return UnsafePointer(bitPattern: 0)! }
+  fileprivate mutating func add(_ string: String?) -> UnsafePointer<CChar>? {
+    guard let string else { return nil }
     let pointer = string.toCString()
     cStrings.append(pointer)
     return pointer

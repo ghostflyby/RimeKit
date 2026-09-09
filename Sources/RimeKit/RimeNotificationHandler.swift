@@ -27,7 +27,7 @@ private func thunk(
   )
 }
 
-public enum RimeNotificationType: Codable {
+public enum RimeNotificationType: Codable, Sendable {
   case schema
   case option
   case deploy
@@ -66,7 +66,7 @@ extension RimeEngine {
     opaque = box
   }
 
-  public func setNotificationHandler(_ handler: @escaping RimeNotificationHandler) async {
+  public func setNotificationHandler(_ handler: @escaping RimeNotificationHandler) {
     setNotificationHandler(handler: handler)
   }
 

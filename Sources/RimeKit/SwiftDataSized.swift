@@ -1,4 +1,3 @@
-import InputMethodKit
 import RimeDynamic
 
 protocol CDataSized {

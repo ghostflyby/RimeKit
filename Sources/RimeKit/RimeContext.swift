@@ -8,7 +8,9 @@ public struct RimeContext: Sendable, Codable {
   let menu: RimeMenu
   let commitTextPreview: String
   let selectLabels: [String]
+}
 
+extension RimeContext {
   fileprivate init(rawValue: RimeContextRaw) {
     composition = RimeComposition(rawValue.composition)
     menu = RimeMenu(rawValue.menu)
@@ -19,14 +21,14 @@ public struct RimeContext: Sendable, Codable {
 
 extension RimeSession {
   public var context: RimeContext? {
-    get async {
-      await engine.context(for: sessionID)
+    get throws(RimeError) {
+      try engine.context(for: sessionID)
     }
   }
 }
 
 extension RimeEngine {
-  public func context(for sessionID: RimeSessionID) -> RimeContext? {
+  public func context(for sessionID: RimeSessionID) throws(RimeError) -> RimeContext? {
     var context = RimeContextRaw.rimeStructInit()
     defer { _ = rimeApi.free_context(&context) }
     guard rimeApi.get_context(sessionID.rawValue, &context) else {
@@ -89,16 +91,16 @@ extension RimeMenu {
 }
 
 extension RimeEngine {
-  public func selectCandidate(at index: Int, for session: RimeSessionID) async -> Bool {
+  public func selectCandidate(at index: Int, for session: RimeSessionID) throws(RimeError) -> Bool {
     return rimeApi.select_candidate(session.rawValue, index)
   }
-  public func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async
-    -> Bool
+  public func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID)
+    throws(RimeError) -> Bool
   {
     return rimeApi.select_candidate_on_current_page(session.rawValue, index)
   }
 
-  public func beginCandidates(for session: RimeSessionID) async -> ObjectHandle<
+  public func beginCandidates(for session: RimeSessionID) throws(RimeError) -> ObjectHandle<
     RimeCandidate
   > {
     let handle = ObjectHandle<RimeCandidate>()
@@ -107,7 +109,7 @@ extension RimeEngine {
     return handle
   }
 
-  public func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) async
+  public func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) throws(RimeError)
     -> RimeCandidate?
   {
     var iter = candidateIterators[iterator]!
@@ -119,13 +121,13 @@ extension RimeEngine {
     }
   }
 
-  public func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) async {
+  public func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) throws(RimeError) {
     if var iter = candidateIterators.removeValue(forKey: iterator) {
       rimeApi.candidate_list_end(&iter)
     }
   }
 
-  public func candidateList(fromIndex: Int32, for sessionID: RimeSessionID) async -> ObjectHandle<
+  public func candidateList(fromIndex: Int32, for sessionID: RimeSessionID) throws(RimeError) -> ObjectHandle<
     RimeCandidate
   >? {
     let handle = ObjectHandle<RimeCandidate>()
@@ -134,7 +136,7 @@ extension RimeEngine {
     return handle
   }
 
-  public func stateLabel(for key: String, state: RimeState, in session: RimeSessionID) async
+  public func stateLabel(for key: String, state: RimeState, in session: RimeSessionID) throws(RimeError)
     -> String?
   {
     guard let cStr = rimeApi.get_state_label(session.rawValue, key, state == .on) else {
@@ -145,7 +147,7 @@ extension RimeEngine {
 
   public func stateLabel(
     for key: String, state: RimeState, abbreviated: Bool, in session: RimeSessionID
-  ) async -> String? {
+  ) throws(RimeError) -> String? {
     let slice = rimeApi.get_state_label_abbreviated(
       session.rawValue, key, state == .on, abbreviated)
     guard let bytes = slice.str else {
@@ -156,65 +158,65 @@ extension RimeEngine {
     return String(data: data, encoding: .utf8)
   }
 
-  public func removeCandidate(at index: Int, for session: RimeSessionID) async -> Bool {
+  public func removeCandidate(at index: Int, for session: RimeSessionID) throws(RimeError) -> Bool {
     return rimeApi.delete_candidate(session.rawValue, index)
   }
 
-  public func removeCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async
-    -> Bool
+  public func removeCandidateOnCurrentPage(at index: Int, for session: RimeSessionID)
+    throws(RimeError) -> Bool
   {
     return rimeApi.delete_candidate_on_current_page(session.rawValue, index)
   }
 
-  public func highlightCandidate(at index: Int, for session: RimeSessionID) async -> Bool {
+  public func highlightCandidate(at index: Int, for session: RimeSessionID) throws(RimeError) -> Bool {
     return rimeApi.highlight_candidate(session.rawValue, index)
   }
 
-  public func highlightCandidateOnCurrentPage(at index: Int, for session: RimeSessionID) async
-    -> Bool
+  public func highlightCandidateOnCurrentPage(at index: Int, for session: RimeSessionID)
+    throws(RimeError) -> Bool
   {
     return rimeApi.highlight_candidate_on_current_page(session.rawValue, index)
   }
 
-  public func page(_ direction: RimePageDirection, for session: RimeSessionID) async -> Bool {
+  public func page(_ direction: RimePageDirection, for session: RimeSessionID) throws(RimeError) -> Bool {
     return rimeApi.change_page(session.rawValue, direction == .forward)
   }
 }
 
 extension RimeSession {
-  public func selectCandidate(at index: Int) async -> Bool {
-    await engine.selectCandidate(at: index, for: sessionID)
+  public func selectCandidate(at index: Int) throws(RimeError) -> Bool {
+    try engine.selectCandidate(at: index, for: sessionID)
   }
 
-  public func selectCandidateOnCurrentPage(at index: Int) async -> Bool {
-    await engine.selectCandidateOnCurrentPage(at: index, for: sessionID)
+  public func selectCandidateOnCurrentPage(at index: Int) throws(RimeError) -> Bool {
+    try engine.selectCandidateOnCurrentPage(at: index, for: sessionID)
   }
 
-  public func removeCandidate(at index: Int) async -> Bool {
-    await engine.removeCandidate(at: index, for: sessionID)
+  public func removeCandidate(at index: Int) throws(RimeError) -> Bool {
+    try engine.removeCandidate(at: index, for: sessionID)
   }
 
-  public func removeCandidateOnCurrentPage(at index: Int) async -> Bool {
-    await engine.removeCandidateOnCurrentPage(at: index, for: sessionID)
+  public func removeCandidateOnCurrentPage(at index: Int) throws(RimeError) -> Bool {
+    try engine.removeCandidateOnCurrentPage(at: index, for: sessionID)
   }
 
-  public func highlightCandidate(at index: Int) async -> Bool {
-    await engine.highlightCandidate(at: index, for: sessionID)
+  public func highlightCandidate(at index: Int) throws(RimeError) -> Bool {
+    try engine.highlightCandidate(at: index, for: sessionID)
   }
 
-  public func highlightCandidateOnCurrentPage(at index: Int) async -> Bool {
-    await engine.highlightCandidateOnCurrentPage(at: index, for: sessionID)
+  public func highlightCandidateOnCurrentPage(at index: Int) throws(RimeError) -> Bool {
+    try engine.highlightCandidateOnCurrentPage(at: index, for: sessionID)
   }
 
-  public func page(_ direction: RimePageDirection) async -> Bool {
-    await engine.page(direction, for: sessionID)
+  public func page(_ direction: RimePageDirection) throws(RimeError) -> Bool {
+    try engine.page(direction, for: sessionID)
   }
 
-  public func stateLabel(for key: String, state: RimeState) async -> String? {
-    await engine.stateLabel(for: key, state: state, in: sessionID)
+  public func stateLabel(for key: String, state: RimeState) throws(RimeError) -> String? {
+    try engine.stateLabel(for: key, state: state, in: sessionID)
   }
 
-  public func stateLabel(for key: String, state: RimeState, abbreviated: Bool) async -> String? {
-    await engine.stateLabel(for: key, state: state, abbreviated: abbreviated, in: sessionID)
+  public func stateLabel(for key: String, state: RimeState, abbreviated: Bool) throws(RimeError) -> String? {
+    try engine.stateLabel(for: key, state: state, abbreviated: abbreviated, in: sessionID)
   }
 }

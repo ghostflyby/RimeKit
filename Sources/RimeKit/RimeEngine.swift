@@ -1,8 +1,7 @@
-import Distributed
 import RimeDynamic
 
-public final actor RimeEngine: Rime {
-  nonisolated public static let shared = RimeEngine()
+public final class RimeEngine: @unchecked Sendable {
+  public static let shared = RimeEngine()
 
   internal let rimeApi: RimeApi_stdbool
   internal var opaque: Box?
@@ -22,51 +21,55 @@ public final actor RimeEngine: Rime {
     rimeApi = pointer.load(as: RimeApi_stdbool.self)
   }
 
-  public init(_ pointer: OpaquePointer) {
+  public convenience init(_ pointer: OpaquePointer) {
     self.init(UnsafeRawPointer(pointer))
   }
 
-  public func setup(with traits: RimeTraits) async {
+  public func setup(with traits: RimeTraits) throws(RimeError) {
     var t = rime_traits_t.rimeStructInit()
-    _ = traits.toCStructure(&t)
+    let handle = traits.toCStructure(&t)
     rimeApi.setup(&t)
+    withExtendedLifetime(handle) {}
   }
 
-  public func initialize(with traits: borrowing RimeTraits) async {
+  public func initialize(with traits: borrowing RimeTraits) throws(RimeError) {
     var t = rime_traits_t.rimeStructInit()
-    _ = traits.toCStructure(&t)
+    let handle = traits.toCStructure(&t)
     rimeApi.initialize(&t)
+    withExtendedLifetime(handle) {}
   }
 
-  public func finalize() {
+  public func finalize() throws(RimeError) {
     rimeApi.finalize()
   }
 }
 
 extension RimeEngine {
-  public func startMaintenance(fullCheck: Bool) -> Bool {
+  public func startMaintenance(fullCheck: Bool) throws(RimeError) -> Bool {
     rimeApi.start_maintenance(fullCheck)
   }
 
   public var isMaintenanceMode: Bool {
-    rimeApi.is_maintenance_mode()
+    get throws(RimeError) {
+      rimeApi.is_maintenance_mode()
+    }
   }
 
-  public func joinMaintenanceThread() {
+  public func joinMaintenanceThread() throws(RimeError) {
     rimeApi.join_maintenance_thread()
   }
 }
 
 extension RimeEngine {
-  public func option(named option: String, for sessionID: RimeSessionID) -> Bool {
+  public func option(named option: String, for sessionID: RimeSessionID) throws(RimeError) -> Bool {
     rimeApi.get_option(sessionID.rawValue, option)
   }
 
-  public func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID) {
+  public func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID) throws(RimeError) {
     rimeApi.set_option(sessionID.rawValue, option, value)
   }
 
-  public func property(named property: String, for sessionID: RimeSessionID) -> String? {
+  public func property(named property: String, for sessionID: RimeSessionID) throws(RimeError) -> String? {
     let bufferSize = 1024
     let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
     return buffer.withUnsafeBufferPointer { pointer in
@@ -84,76 +87,98 @@ extension RimeEngine {
     }
   }
 
-  public func setProperty(_ property: String, value: String, for sessionID: RimeSessionID) {
+  public func setProperty(_ property: String, value: String, for sessionID: RimeSessionID) throws(RimeError) {
     rimeApi.set_property(sessionID.rawValue, property, value)
   }
 }
 
 extension RimeEngine {
   public var userID: String {
-    String(cString: rimeApi.get_user_id()!)
+    get throws(RimeError) {
+      guard let userID = rimeApi.get_user_id() else {
+        throw RimeError.engineNotInitialized
+      }
+      return String(cString: userID)
+    }
   }
 
   public var version: String {
-    String(cString: rimeApi.get_version()!)
+    get throws(RimeError) {
+      guard let version = rimeApi.get_version() else {
+        throw RimeError.apiUnavailable("get_version")
+      }
+      return String(cString: version)
+    }
   }
 
   public var userDataSyncDirectory: String {
-    rimeApi.get_user_data_sync_dir(cStringBuffer, RimeEngine.cStringBufferSize)
-    return String(cString: cStringBuffer)
+    get throws(RimeError) {
+      rimeApi.get_user_data_sync_dir(cStringBuffer, RimeEngine.cStringBufferSize)
+      return String(cString: cStringBuffer)
+    }
   }
 
   public var sharedDataDirectory: String {
-    rimeApi.get_shared_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
-    return String(cString: cStringBuffer)
+    get throws(RimeError) {
+      rimeApi.get_shared_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+      return String(cString: cStringBuffer)
+    }
   }
 
   public var userDataDirectory: String {
-    rimeApi.get_user_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
-    return String(cString: cStringBuffer)
+    get throws(RimeError) {
+      rimeApi.get_user_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+      return String(cString: cStringBuffer)
+    }
   }
 
   public var prebuiltDataDirectory: String {
-    rimeApi.get_prebuilt_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
-    return String(cString: cStringBuffer)
+    get throws(RimeError) {
+      rimeApi.get_prebuilt_data_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+      return String(cString: cStringBuffer)
+    }
   }
 
   public var stagingDirectory: String {
-    rimeApi.get_staging_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
-    return String(cString: cStringBuffer)
+    get throws(RimeError) {
+      rimeApi.get_staging_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+      return String(cString: cStringBuffer)
+    }
   }
 
   public var syncDirectory: String {
-    rimeApi.get_sync_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
-    return String(cString: cStringBuffer)
+    get throws(RimeError) {
+      rimeApi.get_sync_dir_s(cStringBuffer, RimeEngine.cStringBufferSize)
+      return String(cString: cStringBuffer)
+    }
   }
-
 }
 
 extension RimeEngine {
-  public func initializeDeployer(with traits: RimeTraits) async {
+  public func initializeDeployer(with traits: RimeTraits) throws(RimeError) {
     var t = rime_traits_t.rimeStructInit()
-    _ = traits.toCStructure(&t)
+    let handle = traits.toCStructure(&t)
     rimeApi.deployer_initialize(&t)
+    withExtendedLifetime(handle) {}
   }
 
-  public func prebuild() async -> Bool {
+  public func prebuild() throws(RimeError) -> Bool {
     rimeApi.prebuild()
   }
 
-  public func deploy() async -> Bool {
+  public func deploy() throws(RimeError) -> Bool {
     rimeApi.deploy()
   }
 
-  public func deploySchema(withID schemaID: String) async -> Bool {
+  public func deploySchema(withID schemaID: String) throws(RimeError) -> Bool {
     rimeApi.deploy_schema(schemaID)
   }
 
-  public func deployConfig(filename: String, versionKey: String) async -> Bool {
+  public func deployConfig(filename: String, versionKey: String) throws(RimeError) -> Bool {
     rimeApi.deploy_config_file(filename, versionKey)
   }
 
-  public func syncUserData() async -> Bool {
+  public func syncUserData() throws(RimeError) -> Bool {
     rimeApi.sync_user_data()
   }
 }
