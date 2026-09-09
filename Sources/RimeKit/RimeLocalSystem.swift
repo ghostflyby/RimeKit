@@ -8,6 +8,7 @@ import Distributed
 public struct RimeLocalSystem: DistributedActorSystem {
   public typealias ActorID = RimeLocalID
   public typealias RemoteObject = Never
+  public typealias SerializationRequirement = RimeLocalWire
   public typealias InvocationDecoder = RimeLocalDecoder
   public typealias InvocationEncoder = RimeLocalEncoder
   public typealias ResultHandler = RimeLocalResultHandler
@@ -62,7 +63,7 @@ public struct RimeLocalDecoder: DistributedTargetInvocationDecoder {
   public typealias SerializationRequirement = RimeLocalWire
   public init() {}
 
-  public func decodeNextArgument<Argument>() throws -> Argument {
+  public mutating func decodeNextArgument<Argument: SerializationRequirement>() throws -> Argument {
     fatalError("RimeLocalSystem 仅支持本地引用调用")
   }
 
@@ -78,10 +79,17 @@ public struct RimeLocalEncoder: DistributedTargetInvocationEncoder {
   public typealias SerializationRequirement = RimeLocalWire
   public init() {}
 
-  public func recordArgument<Value>(_ argument: RemoteCallArgument<Value>) throws {}
-  public func recordReturnType<R>(_ type: R.Type) throws {}
-  public func recordErrorType<E>(_ type: E.Type) throws {}
-  public func recordGenericSubstitution<T>(_ type: T.Type) throws {}
+  public mutating func recordArgument<Value: SerializationRequirement>(
+    _ argument: RemoteCallArgument<Value>
+  ) throws {}
+
+  public mutating func recordReturnType<Res: SerializationRequirement>(_ resultType: Res.Type)
+    throws {}
+
+  public mutating func recordErrorType<E: Error>(_ type: E.Type) throws {}
+
+  public mutating func recordGenericSubstitution<T>(_ type: T.Type) throws {}
+
   public func doneRecording() throws {}
 }
 
@@ -90,8 +98,7 @@ public struct RimeLocalResultHandler: DistributedTargetInvocationResultHandler {
   public typealias SerializationRequirement = RimeLocalWire
   public init() {}
 
-  public func onReturn<Success>(value: Success) async throws
-  where Success: SerializationRequirement {
+  public func onReturn<Success: SerializationRequirement>(value: Success) async throws {
     fatalError("RimeLocalSystem 仅支持本地引用调用")
   }
 
