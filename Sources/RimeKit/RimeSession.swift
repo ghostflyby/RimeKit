@@ -31,7 +31,7 @@ public struct RimeSession: ~Copyable {
   }
 
   deinit {
-    try? engine.destroySession(with: sessionID)
+    _ = try? engine.destroySession(with: sessionID)
   }
 }
 

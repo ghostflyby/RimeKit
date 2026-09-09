@@ -27,7 +27,7 @@ final public class RimeConfig: Sendable {
     self.engine = engine
   }
   deinit {
-    try? engine.close(config: handle)
+    _ = try? engine.close(config: handle)
   }
 }
 

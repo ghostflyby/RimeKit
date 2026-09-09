@@ -13,7 +13,6 @@ import Distributed
 /// - 全部方法**显式标注 `async`**:语义上与隐式等价(分布式方法天然异步),
 ///   但绕开 Swift 6.3.3 类型检查器在方法数 >~10 时丢失隐式 async 的缺陷(V7)。
 /// - 实现体全部一行委托 `RimeEngine.shared`:librime 调用的唯一串行执行域(§3.7)。
-@XPCService
 public distributed actor RimeServiceRoot: XPCRootActor {
   public typealias ActorSystem = XPCDistributedActorSystem
 
