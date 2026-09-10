@@ -12,19 +12,19 @@ public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
 
 public struct RimeSession: ~Copyable {
   internal let sessionID: RimeSessionID
-  internal let root: RimeServiceRoot
+  internal let root: Rime
 
   /// 进程内公开工厂:绑定共享引擎(iOS/进程内路径的公开入口)。
   public init() async throws {
     try await self.init(root: .localShared)
   }
 
-  init(root: RimeServiceRoot) async throws {
+  init(root: Rime) async throws {
     self.sessionID = try await root.createSession()
     self.root = root
   }
 
-  init?(root: RimeServiceRoot, sessionID: RimeSessionID) async throws {
+  init?(root: Rime, sessionID: RimeSessionID) async throws {
     guard try await root.findSession(with: sessionID) else { return nil }
     self.sessionID = sessionID
     self.root = root
@@ -69,7 +69,7 @@ extension RimeSession {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineCreateSession() throws(RimeError) -> RimeSessionID {
     RimeSessionID(rawValue: UInt(rimeApi.create_session()))
   }
@@ -91,7 +91,7 @@ extension RimeServiceRoot {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineProcessKey(keyCode: Int32, modifierMask: Int32, for sessionID: RimeSessionID) throws(RimeError) -> Bool
   {
     rimeApi.process_key(sessionID.rawValue, keyCode, modifierMask)
@@ -106,7 +106,7 @@ extension RimeServiceRoot {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineInput(for sessionID: RimeSessionID) throws(RimeError) -> String? {
     guard let c = rimeApi.get_input(sessionID.rawValue) else {
       return nil

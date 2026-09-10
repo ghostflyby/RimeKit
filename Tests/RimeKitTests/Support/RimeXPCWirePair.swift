@@ -14,7 +14,7 @@ import XPC
 /// `makeConnectionPair`(TN3113:`xpc_connection_create(NULL)` + endpoint):
 ///
 /// 1. 匿名 listener(`XPCConnection(name: nil)`)在 accept 回调里为每个 peer 建
-///    服务端 system,`reserveRootID()` 后创建根 `RimeServiceRoot` 并 `bind`;
+  ///    服务端 system,`reserveRootID()` 后创建根 `Rime` 并 `bind`;
 /// 2. listener endpoint 经 marshal 交给 client 连接(`XPCConnection.unmarshal`);
 /// 3. client `sendAndForget` 空消息触发 accept 握手(信号量等待);
 /// 4. `resolve(id: .root, using: clientSystem)` 得到走线缆的根代理。
@@ -29,12 +29,12 @@ struct RimeXPCWirePair: Sendable {
   let serverSystem: XPCDistributedActorSystem
   let clientSystem: XPCDistributedActorSystem
   /// 连接对服务端创建的根:进程唯一 librime 执行域。
-  let servedRoot: RimeServiceRoot
+    let servedRoot: Rime
 
   private struct AcceptedPeer: Sendable {
     let server: XPCConnection
     let system: XPCDistributedActorSystem
-    let root: RimeServiceRoot
+      let root: Rime
   }
 
   static func make() throws -> RimeXPCWirePair {
@@ -49,7 +49,7 @@ struct RimeXPCWirePair: Sendable {
       let server = XPCConnection(xpc_object: object.xpc_object)
       let serverSystem = XPCDistributedActorSystem(connection: server)
       serverSystem.reserveRootID()
-      let root = RimeServiceRoot(actorSystem: serverSystem)
+        let root = Rime(actorSystem: serverSystem)
       serverSystem.bind(server, to: root)
       acceptedPeer.withLock {
         $0 = AcceptedPeer(server: server, system: serverSystem, root: root)
@@ -81,8 +81,8 @@ struct RimeXPCWirePair: Sendable {
   }
 
   /// 客户端侧根代理:与 `servedRoot` 同一 actor,但每次调用走完整线缆。
-  func resolveProxy() throws -> RimeServiceRoot {
-    try RimeServiceRoot.resolve(id: .root, using: clientSystem)
+    func resolveProxy() throws -> Rime {
+      try Rime.resolve(id: .root, using: clientSystem)
   }
 }
 #endif

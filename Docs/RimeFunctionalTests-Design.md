@@ -158,7 +158,7 @@ SwiftXPC(上游 `/Users/ghostflyby/repos/tests/SwiftXPC`,分支 `wire-fixes-for-
 ## 6. remote 参数化路线(阶段 3 接入清单)
 
 1. `RimeBackend.remote` 补实现:launchd 服务(borrow SwiftXPC demo bundle 模式);
-   `makeRoot` 返回 `RimeServiceRoot.resolve(...)` 代理。RimeBackend 为
+   `makeRoot` 返回 `Rime.resolve(...)` 代理。RimeBackend 为
    `CaseIterable` 枚举,追加 case 即纳入全部 `@Test(arguments:)` 自动双跑/三跑。
 2. `RimeTestEnvironment` 持有连接生命周期,补 `shutdown()`(进程内 no-op);bootstrap
    的健康探活改走 `serviceVersion()`/`healthCheck()`。
@@ -205,7 +205,7 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 
 ## 8. 调查与落地:`setNotificationSink` 泛化为闭包输入扩展函数
 
-**结论:已落地**(2026-09-10)。公开面为 `RimeServiceRoot` 上的闭包参数扩展函数:
+**结论:已落地**(2026-09-10)。公开面为 `Rime` 上的闭包参数扩展函数:
 `try await root.setNotificationHandler { session, type, value in … }`(`nil` = 退订);
 `RimeNotificationSink` 与 `setNotificationSink` 均为 **internal 实现细节**(负向编译
 探针实证外部不可见)。
@@ -217,7 +217,7 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 ### 8.2 Remote 路径:平台中立 sink(已实证)
 
 - `RimeNotificationSink` 平台中立化:`ActorSystem` 条件 typealias(macOS=XPCDistributedActorSystem + `@XPCService`;iOS=RimeLocalSystem,无宏——`XPCDistributedTargetMetadataProviding` 等协议被 `ActorSystem == XPCDistributedActorSystem` 约束锁死在 XPC 侧,iOS 无需白表)。`emit` 参数(`RimeSessionID`/`RimeNotificationType`/`String`)双线缆要求均已满足。
-- `RimeServiceRoot.setNotificationSink` 去 `#if os(macOS)`:iOS 侧参数需补 `RimeNotificationSink: RimeLocalWire` 标记一致性。
+- `Rime.setNotificationSink` 去 `#if os(macOS)`:iOS 侧参数需补 `RimeNotificationSink: RimeLocalWire` 标记一致性。
 - 宿主侧自建匿名 `XPCDistributedActorSystem` 承载 sink(§5.3-V1 结论),sink 引用过线由服务端回流。**运行时探针实证**:经进程内连接对,`setOption` 触发的 `option/ascii_mode`、`option/!ascii_mode` 两条通知到达客户端闭包;`setNotificationSink(nil)` 分离正常(nil Optional 过线依赖 v0.3.2 修复)。
 - 顺序性:sink actor 序列化 `emit`,通知顺序保持。
 
@@ -228,7 +228,7 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 ### 8.4 实现清单(蓝图,约 3 文件)
 
 1. `RimeNotificationSink` 平台中立化(条件 ActorSystem + 条件 `@XPCService`,可用性 `@available(macOS 15, iOS 16, *)`);
-2. `RimeServiceRoot.setNotificationSink` 去 `#if`(iOS 分支 sink 生命周期由订阅持有,根不 retain);
+2. `Rime.setNotificationSink` 去 `#if`(iOS 分支 sink 生命周期由订阅持有,根不 retain);
 3. 新增客户端订阅类型 + `RimeLocalWire` 一致性;macOS attach = 自建 system + sink + 过线订阅,iOS attach = 直接 C 注册;
 4. 测试:双后端 sink 回流(探针 B 已验证)、iOS destination 编译守护(探针 A 已验证)。
 
@@ -254,7 +254,7 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 - **公开 API 为 `nonisolated` 扩展函数而非订阅类型**:nonisolated 成员可在远程
   代理上调用(isolated 非 distributed 成员被编译器拒绝),故
   `setNotificationHandler(_:)` 以 `nonisolated func` 形式落在
-  `RimeServiceRoot` 扩展上,本地/远程引用同一调用点。
+  `Rime` 扩展上,本地/远程引用同一调用点。
 - **本地性判定**:语言层无 `isRemote`(提案评审移除),用 system 注册表判定——
   `actorSystem.resolve(id:as:)` 能查到本 actor 即本地,否则远程。
   iOS(RimeLocalSystem)恒为本地。

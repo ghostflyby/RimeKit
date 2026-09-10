@@ -4,7 +4,7 @@ import Foundation
 #endif
 import RimeDynamic
 
-public extension RimeServiceRoot {
+public extension Rime {
   /// 设置进程/服务引擎的全局通知回调(`nil` = 退订,替换语义)。
   ///
   /// 按引用形态自动分派(§8):

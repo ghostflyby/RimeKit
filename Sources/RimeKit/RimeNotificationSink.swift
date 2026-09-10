@@ -4,11 +4,11 @@ import DistributedXPC
 #endif
 
 /// 通知回流的宿主侧接收端(§3.5)。**内部实现细节**:外部经
-/// `RimeNotificationSubscription` 以闭包订阅,不直接触碰本类型与
+/// `Rime.setNotificationHandler` 以闭包订阅,不直接触碰本类型与
 /// `setNotificationSink`。
 ///
 /// 宿主在本地构造(捕获既有 `RimeNotificationHandler` 闭包),经
-/// `RimeServiceRoot.setNotificationSink(_:)` 把 actor 引用交给服务端;
+/// `Rime.setNotificationSink(_:)` 把 actor 引用交给服务端;
 /// librime 的 C thunk 在维护线程上触发时,服务端立即脱线程转发到
 /// `emit`(§3.8 I3:引擎不等待、不重入)。
 ///

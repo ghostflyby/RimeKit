@@ -24,10 +24,10 @@ extension RimeSession {
 
 /// 句柄式候选迭代:从 `beginCandidates` 走到穷尽,收尾 `endCandidateIterator`。
 ///
-/// 自由函数而非 `RimeServiceRoot` 扩展:根是"潜在远程"的 distributed actor,
+/// 自由函数而非 `Rime` 扩展:根是"潜在远程"的 distributed actor,
 /// 非 distributed 成员不可经其引用调用(分布式隔离规则)。
 func collectAllCandidates(
-  from root: RimeServiceRoot, session: RimeSessionID
+  from root: Rime, session: RimeSessionID
 ) async throws -> [String] {
   let iterator = try await root.beginCandidates(for: session)
   var texts: [String] = []

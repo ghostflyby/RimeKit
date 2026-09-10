@@ -21,8 +21,8 @@ public struct ObjectHandle<T>: Sendable, Codable, Hashable {
 final public class RimeConfig: Sendable {
 
   internal let handle: ObjectHandle<RimeConfig>
-  internal let root: RimeServiceRoot
-  fileprivate init(handle: ObjectHandle<RimeConfig>, root: RimeServiceRoot) {
+  internal let root: Rime
+  fileprivate init(handle: ObjectHandle<RimeConfig>, root: Rime) {
     self.handle = handle
     self.root = root
   }
@@ -33,7 +33,7 @@ final public class RimeConfig: Sendable {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineOpenSchema(schemaID: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
     var config: rime_config_t = rime_config_t()
     if rimeApi.schema_open(schemaID, &config) {
@@ -109,7 +109,7 @@ extension RimeConfig {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
 
   func engineClose(config: ObjectHandle<RimeConfig>) throws(RimeError) -> Bool {
     // 关闭即从句柄表移除:句柄一次性,复用抛 invalidHandle 而非悬垂读取已释放的
@@ -296,7 +296,7 @@ extension RimeServiceRoot {
 
 }
 
-extension RimeServiceRoot {
+extension Rime {
 
   func engineBeginMap(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> ObjectHandle<RimeConfigIterator>

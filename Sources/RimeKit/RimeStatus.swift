@@ -34,7 +34,7 @@ extension RimeSession {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineStatus(for sessionID: RimeSessionID) throws(RimeError) -> RimeStatus? {
     var status = rime_status_t_stdbool.rimeStructInit()
     defer { _ = rimeApi.free_status(&status) }

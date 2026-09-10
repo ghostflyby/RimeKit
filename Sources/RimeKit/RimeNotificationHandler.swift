@@ -82,7 +82,7 @@ enum RimeGlobalNotificationHook {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   var engineNotificationHandler: RimeNotificationHandler? {
     get { opaque?.body }
     set {

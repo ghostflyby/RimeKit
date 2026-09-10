@@ -25,7 +25,7 @@ extension RimeSchemaList {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   var engineSchemaList: RimeSchemaList {
     get throws(RimeError) {
     var schemaList = rime_schema_list_t()

@@ -29,7 +29,7 @@ extension RimeSession {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineContext(for sessionID: RimeSessionID) throws(RimeError) -> RimeContext? {
     var context = RimeContextRaw.rimeStructInit()
     defer { _ = rimeApi.free_context(&context) }
@@ -95,7 +95,7 @@ extension RimeMenu {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineSelectCandidate(at index: Int, for session: RimeSessionID) throws(RimeError) -> Bool {
     return rimeApi.select_candidate(session.rawValue, index)
   }

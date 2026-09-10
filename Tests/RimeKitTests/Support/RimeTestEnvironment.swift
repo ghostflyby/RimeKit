@@ -99,14 +99,14 @@ final class RimeTestRuntime: Sendable {
   /// 自 bootstrap 注册起的全局通知流水(部署/选项/方案切换断言的数据源)。
   let notifications: RimeNotificationLog
   /// 唯一根 actor 实例:诞生于连接对服务端,`inProcess` 后端持其本地引用。
-  let root: RimeServiceRoot
+  let root: Rime
   #if os(macOS)
   /// 进程内连接对(`inProcessXPC` 后端的线缆通道);持有全部连接的生命周期。
   let wirePair: RimeXPCWirePair?
   #endif
 
   private init(
-    userDirectory: URL, notifications: RimeNotificationLog, root: RimeServiceRoot
+    userDirectory: URL, notifications: RimeNotificationLog, root: Rime
   ) {
     self.userDirectory = userDirectory
     self.notifications = notifications
@@ -118,7 +118,7 @@ final class RimeTestRuntime: Sendable {
 
   #if os(macOS)
   private init(
-    userDirectory: URL, notifications: RimeNotificationLog, root: RimeServiceRoot,
+      userDirectory: URL, notifications: RimeNotificationLog, root: Rime,
     wirePair: RimeXPCWirePair
   ) {
     self.userDirectory = userDirectory
@@ -147,7 +147,7 @@ final class RimeTestRuntime: Sendable {
     let wirePair = try RimeXPCWirePair.make()
     let root = wirePair.servedRoot
     #else
-    let root = RimeServiceRoot(actorSystem: RimeLocalSystem())
+      let root = Rime(actorSystem: RimeLocalSystem())
     #endif
     let notifications = RimeNotificationLog.installCollector()
 
@@ -226,13 +226,13 @@ final class RimeTestEnvironment: Sendable {
   /// 本环境对应的引用形态。
   let backend: RimeBackend
   /// 被测根引用:`.inProcess` = 服务端根的本地引用;`.inProcessXPC` = 线缆代理。
-  let root: RimeServiceRoot
+  let root: Rime
   fileprivate let runtime: RimeTestRuntime
 
   var userDirectory: URL { runtime.userDirectory }
   var notifications: RimeNotificationLog { runtime.notifications }
 
-  fileprivate init(backend: RimeBackend, runtime: RimeTestRuntime, root: RimeServiceRoot) {
+  fileprivate init(backend: RimeBackend, runtime: RimeTestRuntime, root: Rime) {
     self.backend = backend
     self.runtime = runtime
     self.root = root
@@ -282,7 +282,7 @@ private actor RimeBootstrap {
       }
     }
 
-    let root: RimeServiceRoot
+    let root: Rime
     switch backend {
     case .inProcess:
       root = runtime.root

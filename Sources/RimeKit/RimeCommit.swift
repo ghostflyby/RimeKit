@@ -24,7 +24,7 @@ extension RimeCommit {
   }
 }
 
-extension RimeServiceRoot {
+extension Rime {
   func engineCommit(for sessionID: RimeSessionID) throws(RimeError) -> RimeCommit? {
     var commit = rime_commit_t.rimeStructInit()
     defer { _ = rimeApi.free_commit(&commit) }

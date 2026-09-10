@@ -60,7 +60,7 @@ librime 是**进程级单例**:`setup/initialize/finalize` 全局唯一、全局
 4. 维护线程(`start_maintenance` / `join_maintenance_thread`)与 deployer;
 5. 目录状态(shared/user/prebuilt/staging/sync)。
 
-**结论**:librime 的单例性与"一个 XPC 服务进程一个 librime"完全同构——服务进程内 `RimeServiceRoot` 委托 `RimeEngine.shared` 即可,不需要任何新的并发原语。
+**结论**:librime 的单例性与"一个 XPC 服务进程一个 librime"完全同构——服务进程内 `Rime` 委托 `RimeEngine.shared` 即可,不需要任何新的并发原语。
 
 ### 1.4 缺陷与阻塞项清单(阶段 2a 前置修复)
 
@@ -261,7 +261,7 @@ public enum HandleKind: Sendable, Hashable { case config, configIterator, candid
 
 // XPC 条件编译区(主包内 RimeKitXPC 目标,#if os(macOS) 守卫,公开 API 均 @available(macOS 15, *)):
 @XPCService
-public distributed actor RimeServiceRoot: XPCRootActor {
+public distributed actor Rime: XPCRootActor {
   public typealias ActorSystem = XPCDistributedActorSystem
   // 81 个 distributed func,签名与重塑后 Rime 要求 1:1 镜像(属性→getter 方法),
   // typed throws(RimeError)(宏据此生成 thrownErrorType 元数据,上游 IntegrationError 同型实证),
@@ -270,8 +270,8 @@ public distributed actor RimeServiceRoot: XPCRootActor {
 }
 
 // 客户端(RimeKitXPC):
-//   直接持有具体类型引用 —— resolve 返回的远程代理与本地实例同为 RimeServiceRoot:
-//   let rime = try RimeServiceRoot.resolve(id: .root, using: clientSystem)
+//   直接持有具体类型引用 —— resolve 返回的远程代理与本地实例同为 Rime:
+//   let rime = try Rime.resolve(id: .root, using: clientSystem)
 //   try await rime.processKey(...)   // 直接调用,编译器生成 thunk 走线缆
 //   蓝绿 = 同一具体类型的两个引用(蓝/绿各一条 XPCRootConnection),换绑即引用交换。
 ```
@@ -295,7 +295,7 @@ public distributed actor RimeServiceRoot: XPCRootActor {
                         _ type: RimeNotificationType, _ value: String) // → 调 handler
 }
 
-// RimeServiceRoot 增补(不进 Rime 协议):
+// Rime 增补(不进 Rime 协议):
 distributed func setNotificationSink(_ sink: RimeNotificationSink?)  // nil = 取消注册
 ```
 
@@ -313,7 +313,7 @@ distributed func setNotificationSink(_ sink: RimeNotificationSink?)  // nil = �
 
 ### 3.7 执行域与队列规则(并发架构定案,决策 7)
 
-**方案 1(确立)**:根 actor(RimeServiceRoot)为低级别 API、全量暴露函数,作为 librime 调用的**唯一串行执行域**——进程内即 `RimeEngine` actor;服务进程内逐 peer 根 actor 一行委托 `RimeEngine.shared`,多连接天然汇流到同一执行器。语义化 API(DTO、`RimeSession<Engine>` 门面、候选流、§3.8 后的语义封装)为**非 actor 二次封装层**:只做工效学增值(组合调用、流、值类型化),不持有队列、不触碰 librime。
+**方案 1(确立)**:根 actor(Rime)为低级别 API、全量暴露函数,作为 librime 调用的**唯一串行执行域**——进程内即 `RimeEngine` actor;服务进程内逐 peer 根 actor 一行委托 `RimeEngine.shared`,多连接天然汇流到同一执行器。语义化 API(DTO、`RimeSession<Engine>` 门面、候选流、§3.8 后的语义封装)为**非 actor 二次封装层**:只做工效学增值(组合调用、流、值类型化),不持有队列、不触碰 librime。
 
 **方案 2(否决,证据链)**:会话 actor/配置 actor/维护 actor 各持队列 ⇒ 多执行流并发触达 librime ⇒ 按 §2.6 是数据竞争而非"退化为内部全局锁"。librime 不提供内部并行,自有队列换不来吞吐;真实代价反而是:跨 actor 的调用重排序(按键序列失去全序)、actor 间 await 的死锁面、以及每个语义 actor 到拥有者的额外 hop。可并行的真实空间只有三处,均已由既有设计覆盖:绿机预热部署(独立进程,§4.3)、通知 sink 的 Swift 侧扇出(§3.5)、取数后的纯 Swift 值处理(语义层,无锁自由处理)。
 
@@ -377,9 +377,9 @@ Host.app/Contents/XPCServices/
 - launchd on-demand(`ServiceType = Application`),打包方式复用 SwiftXPC Demo 的 `build-demo-bundle.sh` 模式。
 - 同一服务二进制只部署一份逻辑代码;蓝/绿只是**两个可独立替换升级的实例槽位**。升级 = 替换非活动槽位的 bundle → 预热 → 换绑 → drain → 下一轮角色互换。**"当前活动色"由客户端管理器持久化**(App Support 下一个小状态文件),App 重启后能认出谁是蓝谁是绿。
 
-### 4.2 服务端:`RimeServiceRoot`
+### 4.2 服务端:`Rime`
 
-- `distributedXPCMain(RimeServiceRoot.self)`;`XPCRootActorServer` 对**每个 peer 连接**新建一个 root actor 实例,全部委托 `RimeEngine.shared`(进程内仍单例)。
+- `distributedXPCMain(Rime.self)`;`XPCRootActorServer` 对**每个 peer 连接**新建一个 root actor 实例,全部委托 `RimeEngine.shared`(进程内仍单例)。
 - 在 `Rime` 全量方法之外增补运维面(不进协议):`serviceVersion() -> String`(构建号/契约版本)、`healthCheck() -> Bool`、`setNotificationSink(_:)`(§3.5)。
 - **运维通道分离**:预热期对绿机发起的 `deploy/fullCheck/syncUserData` 走**专用第二条连接**(第二个 peer → 第二个 root actor 实例 → 同一引擎),避免长调用在传输层队头阻塞同通道的会话操作;引擎级串行仍存在,但真正的重活发生在"尚无客户端会话"的绿机上,实际影响为零(阻塞规则 I4:服务路径禁 deploy/join,§3.8)。
 - 生命周期:服务进程随最后一个连接断开被 launchd 回收前,`xpcTransactionBegin/End` 在预热窗口保活;librime 冷启动成本(initialize+deploy,秒级)只在预热路径发生。
@@ -393,7 +393,7 @@ public final class RimeBlueGreenManager: Sendable {
   private let sides: (blue: SideHandle, green: SideHandle)
   private let active: Mutex<Side>
 
-  public var activeRoot: RimeServiceRoot { ... }  // active 侧连接的根代理(具体类型,非存在型)
+  public var activeRoot: Rime { ... }  // active 侧连接的根代理(具体类型,非存在型)
 
   public func preheat(_ side: Side, traits: RimeTraits) async throws(RimeError)
   public func switchOver() async            // 原子换绑 + 会话迁移 + sink 重注册
@@ -454,7 +454,7 @@ drain 期客户端**同时**与蓝(旧构建)、绿(新构建)两代服务通信
 | 阶段 | 内容 | 退出标准 |
 |---|---|---|
 | **2a 地基**(纯核心,不引 SwiftXPC) | 修 D1(测试目录/import 重命名 + 首批真实测试);修 D2(候选迭代器补存储);D3(`RimeTraits` 公开 memberwise init);typed throws `RimeError` 落地协议与实现、替换全部强解包(D4);去 `borrowing`;`setNotificationHandler` 移出协议;`RimeSession` 泛型化 `RimeSession<Engine: Rime>`;D6/D7/D8 卫生;tools 6.1→6.2 | `swift test` 绿;81 要求全 `throws(RimeError)`;核心仍 macOS 13/iOS 15 |
-| **2b XPC 目标** | 主包内新增 RimeKitXPC 目标(依赖 RimeKit 核心区 + DistributedXPC 0.2.0,开发期本地 path 依赖;**依赖声明带 `condition: .when(platforms: [.macOS])`,§2.5**):源文件全部 `#if os(macOS)` 守卫;全部公开 API 标注 `@available(macOS 15, *)`;新增库产品;DTO/`RimeError`/`ObjectHandle` 手写 `XPCMarshal` + 往返测试;`@XPCService RimeServiceRoot`(81 个 distributed func,typed throws,委托 `RimeEngine.shared`,**不 conform Rime**,§3.4 F3);客户端直接持具体类型引用(无适配器);`RimeNotificationSink`;运维面方法 | 端到端:双进程(demo bundle)内以具体类型全流程跑通,含按键/候选/配置/通知回传;**RimeKit 包 iOS 模拟器 destination 构建保持绿**(§2.5 守护) |
+| **2b XPC 目标** | 主包内新增 RimeKitXPC 目标(依赖 RimeKit 核心区 + DistributedXPC 0.2.0,开发期本地 path 依赖;**依赖声明带 `condition: .when(platforms: [.macOS])`,§2.5**):源文件全部 `#if os(macOS)` 守卫;全部公开 API 标注 `@available(macOS 15, *)`;新增库产品;DTO/`RimeError`/`ObjectHandle` 手写 `XPCMarshal` + 往返测试;`@XPCService Rime`(81 个 distributed func,typed throws,委托 `RimeEngine.shared`,**不 conform Rime**,§3.4 F3);客户端直接持具体类型引用(无适配器);`RimeNotificationSink`;运维面方法 | 端到端:双进程(demo bundle)内以具体类型全流程跑通,含按键/候选/配置/通知回传;**RimeKit 包 iOS 模拟器 destination 构建保持绿**(§2.5 守护) |
 | **3 蓝绿管理器** | `RimeBlueGreenManager`(预热/迁移/换绑/drain/回滚/持久化);运维通道分离;集成测试(参照 SwiftXPC `XPCRootReconnectionTests` 的真实 connection pair 模式 + 双实例 kill/relaunch 探针) | 真机双 .xpc 换绑切换,drain 期无丢失调用;预热失败自动回滚 |
 | **4 交付** | 打包脚本(双槽位 bundle)、签名要求(peer code-signing requirement 接入 `shouldAccept`)、运维文档(升级/回滚手册、`serviceVersion` 语义) | 文档 + 打包脚本入库 |
 
@@ -465,7 +465,7 @@ drain 期客户端**同时**与蓝(旧构建)、绿(新构建)两代服务通信
 | R1 | SwiftXPC 无超时/无取消:服务端一次卡死(librime hook 死锁、畸形 schema)永久占用通道 | 高 | 预热路径自带超时竞速(§4.3);服务路径短期接受,推动上游 Phase 6;蓝绿本身是兜底(整进程可弃) |
 | R2 | launchd 空闲回收:低峰期杀服务 → 下次按键冷启动(秒级) | 高 | 预热窗口 `xpcTransactionBegin/End` 保活;评估 plist 禁 idle exit;冷启动路径复用迁移代码快速重建 |
 | R3 | 宏字段序脆弱:DTO 重排即破跨代 drain | 中 | §4.6 additive-only 纪律 + 往返测试入 CI |
-| R4 | `RimeServiceRoot` 81 处服务端委托为手写面,易漂移 | 中 | `@XPCService` 元数据编译期生成,漏方法在调用时报 `unknownTarget` 即时暴露;codegen 脚本可选。另登记(F3):未来若让根 actor 回接 `Rime` 一致性,typed throws 见证在 Swift 6.3.3 触发 IRGen 崩溃,需等编译器修复后重评 |
+| R4 | `Rime` 81 处服务端委托为手写面,易漂移 | 中 | `@XPCService` 元数据编译期生成,漏方法在调用时报 `unknownTarget` 即时暴露;codegen 脚本可选。另登记(F3):未来若让根 actor 回接 `Rime` 一致性,typed throws 见证在 Swift 6.3.3 触发 IRGen 崩溃,需等编译器修复后重评 |
 | R5 | 通知 sink 依赖客户端自有 `XPCDistributedActorSystem`(§5.3-V1 未验证) | 中 | 2b 首个验证项;若 `XPCRootConnection` 不暴露,可独立构造 system(export 只需匿名监听,不依赖根连接)或推动上游暴露 |
 | R6 | iOS 边界:XPC 能力在 iOS 不可用(命名服务模型被 Apple 标注 unavailable,§2.5) | 低 | 平台条件化依赖(`.when(platforms: [.macOS])`)使 iOS 构建图不含 SwiftXPC + 目标内 `#if os(macOS)` 守卫 + `@available(macOS 15, *)` 门控;CI 加 iOS destination 构建守护(漏守卫/误依赖即红) |
 | R7 | 每 peer 一个 root actor 实例的语义:两条连接看到两个实例,但共享同一引擎/会话表 | 低 | 文档明示"多连接=同引擎多视图";管理器用键避免跨连接句柄混用 |
@@ -486,9 +486,9 @@ drain 期客户端**同时**与蓝(旧构建)、绿(新构建)两代服务通信
 - **V4** 泛型 `extension ObjectHandle: XPCMarshal` 单份一致性覆盖全部 `T` 的编译形状(`static func unmarshal(from:) -> Self` 在泛型上下文的解析)。
 - **V5** launchd 下双槽位 .xpc 并存、按名独立拉起/回收(demo bundle 脚本扩展)。
 - **V6** 上游核对:大写 label 限制在 `parseTargetIdentifier` 修复后可解除(不影响本方案,现有命名已合规)。
-- **V7(升级为阻塞项)**:Swift 6.3.3 分布式 actor 缺陷族(F3 家族)实测扩大——除 F3 的 IRGen 崩溃外,同一类型内声明约 10 个以上 `distributed func` 后,后续方法**失去隐式 async**("add 'async' to function ..."/"function that does not support concurrency"),边界随文件布局/拆分**非确定性移动**,与 typed/untyped throws 无关,扩展与多文件拆分均无法绕过(2026-09-09 在 RimeServiceRoot 80 方法上实测,错误输出在案)。已获源码级可行的替代路径:**根 actor 以 untyped `throws` 声明 + 手写 `xpcDistributedTargetMetadata` 表携带 `thrownErrorType: RimeError.self`**——服务端 `onThrow` 按运行时值 cast 编码(XPCInvocationResultHandler.swift:33–38),客户端解码按元数据回退(XPCDistributedActorSystem.swift:216–226),类型化错误语义端到端保留;但服务端编码路径依赖的"运行时值 cast"仍需进程内连接对测试实证后启用。补充实证(同日):为根 actor 全部方法**显式标注 `async`** 后,类型检查阶段的隐式 async 丢失完全消失(显式标注不经过出错的细化路径,零语义代价);但编译在 IRGen 阶段崩溃(signal 5,F3 同族)——即缺陷横跨类型检查与 IRGen 两个阶段,Swift 6.3.3 上 80 方法 typed-throws 分布式 actor 无法落地。`RimeServiceRoot` 以 `RimeServiceRoot.swift.disabled.explicit-async` 保留(显式 async 版,最接近可用),`RimeKitRimeService` 可执行目标同步暂缓;解除条件:升级/修复工具链后重试该文件,或上报 swiftlang 待修复。
+- **V7(升级为阻塞项)**:Swift 6.3.3 分布式 actor 缺陷族(F3 家族)实测扩大——除 F3 的 IRGen 崩溃外,同一类型内声明约 10 个以上 `distributed func` 后,后续方法**失去隐式 async**("add 'async' to function ..."/"function that does not support concurrency"),边界随文件布局/拆分**非确定性移动**,与 typed/untyped throws 无关,扩展与多文件拆分均无法绕过(2026-09-09 在 Rime 80 方法上实测,错误输出在案)。已获源码级可行的替代路径:**根 actor 以 untyped `throws` 声明 + 手写 `xpcDistributedTargetMetadata` 表携带 `thrownErrorType: RimeError.self`**——服务端 `onThrow` 按运行时值 cast 编码(XPCInvocationResultHandler.swift:33–38),客户端解码按元数据回退(XPCDistributedActorSystem.swift:216–226),类型化错误语义端到端保留;但服务端编码路径依赖的"运行时值 cast"仍需进程内连接对测试实证后启用。补充实证(同日):为根 actor 全部方法**显式标注 `async`** 后,类型检查阶段的隐式 async 丢失完全消失(显式标注不经过出错的细化路径,零语义代价);但编译在 IRGen 阶段崩溃(signal 5,F3 同族)——即缺陷横跨类型检查与 IRGen 两个阶段,Swift 6.3.3 上 80 方法 typed-throws 分布式 actor 无法落地。`Rime` 以 `Rime.swift.disabled.explicit-async` 保留(显式 async 版,最接近可用),`RimeKitRimeService` 可执行目标同步暂缓;解除条件:升级/修复工具链后重试该文件,或上报 swiftlang 待修复。
 - **V8 勘误与解锁(2026-09-10,iOS 构建阻塞根因改判)**:V7 及会话记录中"IRGen signal 5 由方法规模(80+)触发、与部署目标无关"的判断**均不成立**。经约 20 组二分/对照实验(swift-frontend 单文件探针循环,直接复用崩溃日志命令,~40s/组)收敛出必要且充分的触发条件,**独立最小包已复现**:
-  - **触发条件 = 分布式方法签名提及带 `~Copyable` 约束参数的泛型 × 部署目标低于 iOS 18.0 / macOS 15.0**。`RimeServiceRoot` 中首个此类签名是第 34 个方法 `openSchema -> ObjectHandle<RimeConfig>?`(`ObjectHandle<T: ~Copyable>`);此前方法全部为非泛型/可拷贝泛型签名,故呈现"34 方法以内不崩、之后全崩"的规模假象(80+ 方法观察即为全部方法都在第 34 个之后的必然结果)。
+  - **触发条件 = 分布式方法签名提及带 `~Copyable` 约束参数的泛型 × 部署目标低于 iOS 18.0 / macOS 15.0**。`Rime` 中首个此类签名是第 34 个方法 `openSchema -> ObjectHandle<RimeConfig>?`(`ObjectHandle<T: ~Copyable>`);此前方法全部为非泛型/可拷贝泛型签名,故呈现"34 方法以内不崩、之后全崩"的规模假象(80+ 方法观察即为全部方法都在第 34 个之后的必然结果)。
   - 部署目标矩阵(同一 iOS 形态内容,82 方法全量):ios 16/17.1/17.4 **崩**,ios 18/26 过;macosx 13/14 **崩**,macosx 15/16/26 过。macOS 构建全绿的真因是包 floor 为 macOS 15(恰在边界之上),而非"macOS 不受影响"。
   - 否定项(逐项对照实证):typed/untyped throws 无关(untyped 82 方法同样崩);文件拆分无关(distributed thunk 的 IRGen 发射按类型/模块级进行——主声明与扩展分别作 primary 编译均崩);方法数无关(33 个可通过方法 + 1 个返回 `WrapNC<RimeConfig>?`(`~Copyable` 约束、空泛型)的方法即崩;可拷贝泛型 `Wrap<T: Sendable>` 同位置不崩);签名位置无关(参数位/返回位、Optional/非 Optional 均崩)。
   - **V7 备选路径作废**:untyped throws + 手写 `xpcDistributedTargetMetadata` 携带 `thrownErrorType` 的方案在 iOS 16 目标同样 IRGen 崩溃,该路径不解决 iOS(其 macOS 15+ 有效性不受本勘误影响)。
