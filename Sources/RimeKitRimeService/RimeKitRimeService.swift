@@ -10,7 +10,7 @@ import RimeKit
 @MainActor
 struct RimeKitRimeService {
   static func main() async {
-    await distributedXPCMain(RimeServiceRoot.self)
+    distributedXPCMain(RimeServiceRoot.self)
   }
 }
 #else
