@@ -28,14 +28,14 @@ extension RimeStatus {
 
 extension RimeSession {
   public var status: RimeStatus? {
-    get throws(RimeError) {
-      try engine.status(for: sessionID)
+    get async throws {
+      try await root.status(for: sessionID)
     }
   }
 }
 
-extension RimeEngine {
-  public func status(for sessionID: RimeSessionID) throws(RimeError) -> RimeStatus? {
+extension RimeServiceRoot {
+  func engineStatus(for sessionID: RimeSessionID) throws(RimeError) -> RimeStatus? {
     var status = rime_status_t_stdbool.rimeStructInit()
     defer { _ = rimeApi.free_status(&status) }
     guard rimeApi.get_status(sessionID.rawValue, &status) else {

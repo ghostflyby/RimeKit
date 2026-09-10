@@ -1,4 +1,5 @@
 import Distributed
+import Foundation
 
 /// 进程内专用分布式 actor 系统(§4.1 iOS/进程内路径)。
 ///
@@ -113,3 +114,31 @@ public struct RimeLocalID: Hashable, Sendable {
   public var raw: UInt
   public init(raw: UInt) { self.raw = raw }
 }
+
+// MARK: - 边界类型 RimeLocalWire 一致性(iOS 类型检查;声明式,无运行时行为)
+
+extension Int32: RimeLocalWire {}
+extension Double: RimeLocalWire {}
+extension Int: RimeLocalWire {}
+extension UInt: RimeLocalWire {}
+extension Bool: RimeLocalWire {}
+extension String: RimeLocalWire {}
+extension UUID: RimeLocalWire {}
+extension Array: RimeLocalWire where Element: RimeLocalWire {}
+extension Optional: RimeLocalWire where Wrapped: RimeLocalWire {}
+extension RimeSessionID: RimeLocalWire {}
+extension RimeError: RimeLocalWire {}
+extension RimeState: RimeLocalWire {}
+extension RimePageDirection: RimeLocalWire {}
+extension RimeNotificationType: RimeLocalWire {}
+extension ObjectHandle: RimeLocalWire {}
+extension RimeCommit: RimeLocalWire {}
+extension RimeStatus: RimeLocalWire {}
+extension RimeComposition: RimeLocalWire {}
+extension RimeMenu: RimeLocalWire {}
+extension RimeCandidate: RimeLocalWire {}
+extension RimeContext: RimeLocalWire {}
+extension RimeSchemaListItem: RimeLocalWire {}
+extension RimeSchemaList: RimeLocalWire {}
+extension RimeConfigLocation: RimeLocalWire {}
+extension RimeTraits: RimeLocalWire {}

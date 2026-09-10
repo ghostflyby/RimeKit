@@ -21,18 +21,20 @@ public struct ObjectHandle<T: ~Copyable>: Sendable, Codable, Hashable {
 final public class RimeConfig: Sendable {
 
   internal let handle: ObjectHandle<RimeConfig>
-  internal let engine: RimeEngine
-  fileprivate init(handle: ObjectHandle<RimeConfig>, engine: RimeEngine) {
+  internal let root: RimeServiceRoot
+  fileprivate init(handle: ObjectHandle<RimeConfig>, root: RimeServiceRoot) {
     self.handle = handle
-    self.engine = engine
+    self.root = root
   }
   deinit {
-    _ = try? engine.close(config: handle)
+    let root = root
+    let handle = handle
+    Task { try? await root.close(config: handle) }
   }
 }
 
-extension RimeEngine {
-  public func openSchema(_ schemaID: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
+extension RimeServiceRoot {
+  func engineOpenSchema(schemaID: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
     var config: rime_config_t = rime_config_t()
     if rimeApi.schema_open(schemaID, &config) {
       let handle = ObjectHandle<RimeConfig>()
@@ -43,7 +45,7 @@ extension RimeEngine {
     }
   }
 
-  public func openConfig(_ configID: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
+  func engineOpenConfig(configID: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
     var config: rime_config_t = rime_config_t()
     if rimeApi.config_open(configID, &config) {
       let handle = ObjectHandle<RimeConfig>()
@@ -54,7 +56,7 @@ extension RimeEngine {
     }
   }
 
-  public func openUserConfig(configId: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
+  func engineOpenUserConfig(configId: String) throws(RimeError) -> ObjectHandle<RimeConfig>? {
     var config: rime_config_t = rime_config_t()
     if rimeApi.user_config_open(configId, &config) {
       let handle = ObjectHandle<RimeConfig>()
@@ -67,56 +69,56 @@ extension RimeEngine {
 }
 
 extension RimeConfig {
-  public func string(forKey: String) throws(RimeError) -> String? {
-    try engine.string(forKey: forKey, in: self.handle)
+  public func string(forKey: String) async throws -> String? {
+    try await root.string(forKey: forKey, in: self.handle)
   }
-  public func set(_ value: String, forKey: String) throws(RimeError) -> Bool {
-    try engine.set(value, forKey: forKey, in: self.handle)
+  public func set(_ value: String, forKey: String) async throws -> Bool {
+    try await root.set(value, forKey: forKey, in: self.handle)
   }
-  public func int(forKey: String) throws(RimeError) -> Int32? {
-    try engine.int(forKey: forKey, in: self.handle)
+  public func int(forKey: String) async throws -> Int32? {
+    try await root.int(forKey: forKey, in: self.handle)
   }
-  public func set(_ value: Int32, forKey: String) throws(RimeError) -> Bool {
-    try engine.set(value, forKey: forKey, in: self.handle)
+  public func set(_ value: Int32, forKey: String) async throws -> Bool {
+    try await root.set(value, forKey: forKey, in: self.handle)
   }
-  public func bool(forKey: String) throws(RimeError) -> Bool? {
-    try engine.bool(forKey: forKey, in: self.handle)
+  public func bool(forKey: String) async throws -> Bool? {
+    try await root.bool(forKey: forKey, in: self.handle)
   }
-  public func set(_ value: Bool, forKey: String) throws(RimeError) -> Bool {
-    try engine.set(value, forKey: forKey, in: self.handle)
+  public func set(_ value: Bool, forKey: String) async throws -> Bool {
+    try await root.set(value, forKey: forKey, in: self.handle)
   }
-  public func double(forKey: String) throws(RimeError) -> Double? {
-    try engine.double(forKey: forKey, in: self.handle)
+  public func double(forKey: String) async throws -> Double? {
+    try await root.double(forKey: forKey, in: self.handle)
   }
-  public func set(_ value: Double, forKey: String) throws(RimeError) -> Bool {
-    try engine.set(value, forKey: forKey, in: self.handle)
+  public func set(_ value: Double, forKey: String) async throws -> Bool {
+    try await root.set(value, forKey: forKey, in: self.handle)
   }
-  public func item(forKey: String) throws(RimeError) -> RimeConfig? {
-    if let handle = try engine.item(forKey: forKey, in: self.handle) {
-      RimeConfig(handle: handle, engine: engine)
+  public func item(forKey: String) async throws -> RimeConfig? {
+    if let handle = try await root.item(forKey: forKey, in: self.handle) {
+      RimeConfig(handle: handle, root: root)
     } else {
       nil
     }
   }
-  public func set(_ value: borrowing RimeConfig, forKey: String) throws(RimeError) -> Bool {
-    try engine.set(value.handle, forKey: forKey, in: self.handle)
+  public func set(_ value: borrowing RimeConfig, forKey: String) async throws -> Bool {
+    try await root.set(value.handle, forKey: forKey, in: self.handle)
   }
 
-  public func removeValue(forKey key: String) throws(RimeError) -> Bool {
-    try engine.removeValue(forKey: key, in: self.handle)
+  public func removeValue(forKey key: String) async throws -> Bool {
+    try await root.removeValue(forKey: key, in: self.handle)
   }
 }
 
-extension RimeEngine {
+extension RimeServiceRoot {
 
-  public func close(config: ObjectHandle<RimeConfig>) throws(RimeError) -> Bool {
+  func engineClose(config: ObjectHandle<RimeConfig>) throws(RimeError) -> Bool {
     guard var config = configs[config] else {
       throw RimeError.invalidHandle(kind: .config, id: config.id)
     }
     return rimeApi.config_close(&config)
   }
 
-  public func string(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineString(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> String?
   {
     guard var config = configs[config] else {
@@ -132,7 +134,7 @@ extension RimeEngine {
     }
   }
 
-  public func set(_ value: String, forKey key: String, in config: ObjectHandle<RimeConfig>)
+  func engineSet(value: String, forKey key: String, in config: ObjectHandle<RimeConfig>)
     throws(RimeError) -> Bool
   {
     guard var config = configs[config] else {
@@ -141,7 +143,7 @@ extension RimeEngine {
     return rimeApi.config_set_string(&config, key, value)
   }
 
-  public func int(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineInt(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Int32?
   {
     guard var config = configs[config] else {
@@ -154,7 +156,7 @@ extension RimeEngine {
       nil
     }
   }
-  public func set(_ value: Int32, forKey key: String, in config: ObjectHandle<RimeConfig>)
+  func engineSet(value: Int32, forKey key: String, in config: ObjectHandle<RimeConfig>)
     throws(RimeError) -> Bool
   {
     guard var config = configs[config] else {
@@ -162,7 +164,7 @@ extension RimeEngine {
     }
     return rimeApi.config_set_int(&config, key, value)
   }
-  public func bool(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineBool(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Bool?
   {
     guard var config = configs[config] else {
@@ -175,7 +177,7 @@ extension RimeEngine {
       nil
     }
   }
-  public func set(_ value: Bool, forKey key: String, in config: ObjectHandle<RimeConfig>)
+  func engineSet(value: Bool, forKey key: String, in config: ObjectHandle<RimeConfig>)
     throws(RimeError) -> Bool
   {
     guard var config = configs[config] else {
@@ -183,7 +185,7 @@ extension RimeEngine {
     }
     return rimeApi.config_set_bool(&config, key, value)
   }
-  public func double(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineDouble(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Double?
   {
     guard var config = configs[config] else {
@@ -196,7 +198,7 @@ extension RimeEngine {
       nil
     }
   }
-  public func set(_ value: Double, forKey key: String, in config: ObjectHandle<RimeConfig>)
+  func engineSet(value: Double, forKey key: String, in config: ObjectHandle<RimeConfig>)
     throws(RimeError) -> Bool
   {
     guard var config = configs[config] else {
@@ -204,7 +206,7 @@ extension RimeEngine {
     }
     return rimeApi.config_set_double(&config, key, value)
   }
-  public func item(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineItem(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> ObjectHandle<RimeConfig>?
   {
     guard var config = configs[config] else {
@@ -219,8 +221,8 @@ extension RimeEngine {
       return nil
     }
   }
-  public func set(
-    _ value: ObjectHandle<RimeConfig>, forKey key: String, in config: ObjectHandle<RimeConfig>
+  func engineSet(
+    value: ObjectHandle<RimeConfig>, forKey key: String, in config: ObjectHandle<RimeConfig>
   ) throws(RimeError) -> Bool {
     guard var config = configs[config] else {
       throw RimeError.invalidHandle(kind: .config, id: config.id)
@@ -230,7 +232,7 @@ extension RimeEngine {
     }
     return rimeApi.config_set_item(&config, key, &valueConfig)
   }
-  public func removeValue(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineRemoveValue(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Bool
   {
     guard var config = configs[config] else {
@@ -239,7 +241,7 @@ extension RimeEngine {
     return rimeApi.config_clear(&config, key)
   }
 
-  public func update(signature: String, for config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineUpdate(signature: String, for config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Bool
   {
     guard var config = configs[config] else {
@@ -248,14 +250,14 @@ extension RimeEngine {
     return rimeApi.config_update_signature(&config, signature)
   }
 
-  public func load(yaml: String, into config: ObjectHandle<RimeConfig>) throws(RimeError) -> Bool {
+  func engineLoad(yaml: String, into config: ObjectHandle<RimeConfig>) throws(RimeError) -> Bool {
     guard var config = configs[config] else {
       throw RimeError.invalidHandle(kind: .config, id: config.id)
     }
     return rimeApi.config_load_string(&config, yaml)
   }
 
-  public func createList(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineCreateList(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Bool
   {
     guard var config = configs[config] else {
@@ -264,7 +266,7 @@ extension RimeEngine {
     return rimeApi.config_create_list(&config, key)
   }
 
-  public func createMap(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineCreateMap(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Bool
   {
     guard var config = configs[config] else {
@@ -273,7 +275,7 @@ extension RimeEngine {
     return rimeApi.config_create_map(&config, key)
   }
 
-  public func listSize(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineListSize(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> Int
   {
     guard var config = configs[config] else {
@@ -282,7 +284,7 @@ extension RimeEngine {
     return rimeApi.config_list_size(&config, key)
   }
 
-  public func makeConfig() throws(RimeError) -> ObjectHandle<RimeConfig> {
+  func engineMakeConfig() throws(RimeError) -> ObjectHandle<RimeConfig> {
     let handle = ObjectHandle<RimeConfig>()
     var config = rime_config_t()
     _ = rimeApi.config_init(&config)
@@ -292,9 +294,9 @@ extension RimeEngine {
 
 }
 
-extension RimeEngine {
+extension RimeServiceRoot {
 
-  public func beginMap(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineBeginMap(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> ObjectHandle<RimeConfigIterator>
   {
     let handle = ObjectHandle<RimeConfigIterator>()
@@ -307,7 +309,7 @@ extension RimeEngine {
     return handle
   }
 
-  public func beginList(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
+  func engineBeginList(forKey key: String, in config: ObjectHandle<RimeConfig>) throws(RimeError)
     -> ObjectHandle<RimeConfigIterator>
   {
     let handle = ObjectHandle<RimeConfigIterator>()
@@ -320,7 +322,7 @@ extension RimeEngine {
     return handle
   }
 
-  public func advanceConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(RimeError)
+  func engineAdvanceConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(RimeError)
     -> RimeConfigLocation?
   {
     guard var rime_iterator = configIterators[iterator] else {
@@ -337,7 +339,7 @@ extension RimeEngine {
     return nil
   }
 
-  public func endConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(
+  func engineEndConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(
     RimeError
   ) {
     guard var rime_iterator = configIterators[iterator] else {

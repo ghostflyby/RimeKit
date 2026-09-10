@@ -69,7 +69,7 @@ struct RimeTraitsTests {
 @Suite(.serialized)
 struct RimeEngineSmokeTests {
   @Test func invalidHandleThrowsInsteadOfCrashing() async {
-    let engine = RimeEngine.shared
+    let root = RimeServiceRoot.localShared
     let foreign = ObjectHandle<RimeKit.RimeConfig>()
     await #expect(throws: RimeError.invalidHandle(kind: .config, id: foreign.id)) {
       _ = try engine.string(forKey: "x", in: foreign)
@@ -78,12 +78,12 @@ struct RimeEngineSmokeTests {
 
   @Test func versionSmoke() async throws {
     // 未初始化引擎上 get_version 允许为空(抛 apiUnavailable)或不为空,只要不崩溃。
-    _ = try? RimeEngine.shared.version
+    _ = try? await RimeServiceRoot.localShared.version()
   }
 
   @Test func sessionFacadeInvalidHandlePassthrough() async {
     // 门面将引擎的 typed error 原样透传,不吞不换。
-    let engine = RimeEngine.shared
+    let root = RimeServiceRoot.localShared
     let foreign = ObjectHandle<RimeKit.RimeConfig>()
     do {
       _ = try engine.string(forKey: "x", in: foreign)

@@ -1,8 +1,8 @@
 import Distributed
-
-#if (os(macOS))
-  import DistributedXPC
+#if os(macOS)
+import DistributedXPC
 #endif
+import RimeDynamic
 
 /// librime 的 XPC 服务根 actor(§4.2)。
 ///
@@ -12,140 +12,166 @@ import Distributed
 ///   **不 conform `Rime`**(§3.4 F3:typed throws 见证触发编译器 IRGen 崩溃)。
 /// - 全部方法**显式标注 `async`**:语义上与隐式等价(分布式方法天然异步),
 ///   但绕开 Swift 6.3.3 类型检查器在方法数 >~10 时丢失隐式 async 的缺陷(V7)。
-/// - 实现体全部一行委托 `RimeEngine.shared`:librime 调用的唯一串行执行域(§3.7)。
+/// - 实现体全部一行直调本 actor 的 internal `engine*` 成员:librime 调用的唯一串行执行域(§3.7)。
+@available(macOS 15, iOS 16, *)
+#if os(macOS)
 @XPCService
-public distributed actor RimeServiceRoot: XPCRootActor {
+#endif
+public distributed actor RimeServiceRoot {
+
+  #if os(macOS)
   public typealias ActorSystem = XPCDistributedActorSystem
+  #else
+  public typealias ActorSystem = RimeLocalSystem
+  #endif
 
+  #if os(macOS)
   private var notificationSink: RimeNotificationSink?
+  #endif
 
-  /// 委托目标:经协议的 async 要求调用(分布式方法体的同步隔离上下文
-  /// 不能直接调用另一 actor 的同步成员,经 `any Rime` 走见证 thunk)。
-  private let engine = RimeEngine.shared
+  /// 串行化不变式(§3.7):每进程恰有一个本地共享实例;
+  /// XPC 服务进程由 shouldAccept 单 peer 策略保证。
+  #if os(macOS)
+  internal static let localShared = RimeServiceRoot(
+    actorSystem: XPCDistributedActorSystem(connection: XPCConnection(name: nil)))
+  #else
+  internal static let localShared = RimeServiceRoot(actorSystem: RimeLocalSystem())
+  #endif
+
+  internal let rimeApi: RimeApi_stdbool
+  internal var opaque: Box?
+  internal static let cStringBufferSize = 1024
+  internal let cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
+  internal var configs: [ObjectHandle<RimeConfig>: rime_config_t] = [:]
+  internal var configIterators: [ObjectHandle<RimeConfigIterator>: rime_config_iterator_t] = [:]
+  internal var candidateIterators: [ObjectHandle<RimeCandidate>: rime_candidate_list_iterator_t] = [:]
 
   public init(actorSystem: ActorSystem) {
     self.actorSystem = actorSystem
+    self.rimeApi = rime_get_api_stdbool().pointee
   }
 
   // MARK: 运维面(不进 `Rime` 协议)
 
   public distributed func serviceVersion() async throws(RimeError) -> String {
-    "rimekit/" + (try engine.version)
+    "rimekit/" + (try engineVersion)
   }
 
   public distributed func healthCheck() async throws(RimeError) -> Bool {
     true
   }
 
+  #if os(macOS)
   public distributed func setNotificationSink(_ sink: RimeNotificationSink?) async throws(RimeError)
   {
     notificationSink = sink
     if let sink {
-      engine.setNotificationHandler { session, type, value in
+      engineSetNotificationHandler { session, type, value in
         Task { try? await sink.emit(session, type, value) }
       }
     } else {
-      engine.notificationHandler = nil
+      engineNotificationHandler = nil
     }
   }
+  #endif
 
   // MARK: 生命周期
 
   public distributed func setup(with traits: RimeTraits) async throws(RimeError) {
-    try engine.setup(with: traits)
+    try engineSetup(with: traits)
   }
 
   public distributed func initialize(with traits: RimeTraits) async throws(RimeError) {
-    try engine.initialize(with: traits)
+    try engineInitialize(with: traits)
   }
 
   public distributed func finalize() async throws(RimeError) {
-    try engine.finalize()
+    try engineFinalize()
   }
 
   // MARK: 维护
 
   public distributed func startMaintenance(fullCheck: Bool) async throws(RimeError) -> Bool {
-    try engine.startMaintenance(fullCheck: fullCheck)
+    try engineStartMaintenance(fullCheck: fullCheck)
   }
 
   public distributed func isMaintenanceMode() async throws(RimeError) -> Bool {
-    try engine.isMaintenanceMode
+    try engineIsMaintenanceMode
   }
 
   public distributed func joinMaintenanceThread() async throws(RimeError) {
-    try engine.joinMaintenanceThread()
+    try engineJoinMaintenanceThread()
   }
 
   // MARK: Deployer
 
   public distributed func initializeDeployer(with traits: RimeTraits) async throws(RimeError) {
-    try engine.initializeDeployer(with: traits)
+    try engineInitializeDeployer(with: traits)
   }
 
   public distributed func prebuild() async throws(RimeError) -> Bool {
-    try engine.prebuild()
+    try enginePrebuild()
   }
 
   public distributed func deploy() async throws(RimeError) -> Bool {
-    try engine.deploy()
+    try engineDeploy()
   }
 
   public distributed func deploySchema(withID schemaID: String) async throws(RimeError) -> Bool {
-    try engine.deploySchema(withID: schemaID)
+    try engineDeploySchema(withID: schemaID)
   }
 
   public distributed func deployConfig(filename: String, versionKey: String) async throws(RimeError)
     -> Bool
   {
-    try engine.deployConfig(filename: filename, versionKey: versionKey)
+    try engineDeployConfig(filename: filename, versionKey: versionKey)
   }
 
   public distributed func syncUserData() async throws(RimeError) -> Bool {
-    try engine.syncUserData()
+    try engineSyncUserData()
   }
 
   // MARK: 会话
 
   public distributed func createSession() async throws(RimeError) -> RimeSessionID {
-    try engine.createSession()
+    try engineCreateSession()
   }
 
   public distributed func findSession(with sessionID: RimeSessionID) async throws(RimeError) -> Bool
   {
-    try engine.findSession(with: sessionID)
+    try engineFindSession(with: sessionID)
   }
 
   public distributed func destroySession(with sessionID: RimeSessionID) async throws(RimeError)
     -> Bool
   {
-    try engine.destroySession(with: sessionID)
+    try engineDestroySession(with: sessionID)
   }
 
   public distributed func cleanupStaleSessions() async throws(RimeError) {
-    try engine.cleanupStaleSessions()
+    try engineCleanupStaleSessions()
   }
 
   public distributed func cleanupAllSessions() async throws(RimeError) {
-    try engine.cleanupAllSessions()
+    try engineCleanupAllSessions()
   }
 
   // MARK: 按键
 
   public distributed func processKey(
     keyCode: Int32, modifierMask: Int32, for sessionID: RimeSessionID
-  ) async throws -> Bool {
-    try engine.processKey(keyCode: keyCode, modifierMask: modifierMask, for: sessionID)
+  ) async throws(RimeError) -> Bool {
+    try engineProcessKey(keyCode: keyCode, modifierMask: modifierMask, for: sessionID)
   }
 
   public distributed func commitComposition(for sessionID: RimeSessionID) async throws(RimeError)
     -> Bool
   {
-    try engine.commitComposition(for: sessionID)
+    try engineCommitComposition(for: sessionID)
   }
 
   public distributed func clearComposition(for sessionID: RimeSessionID) async throws(RimeError) {
-    try engine.clearComposition(for: sessionID)
+    try engineClearComposition(for: sessionID)
   }
 
   // MARK: 输出
@@ -153,19 +179,19 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func commit(for sessionID: RimeSessionID) async throws(RimeError)
     -> RimeCommit?
   {
-    try engine.commit(for: sessionID)
+    try engineCommit(for: sessionID)
   }
 
   public distributed func status(for sessionID: RimeSessionID) async throws(RimeError)
     -> RimeStatus?
   {
-    try engine.status(for: sessionID)
+    try engineStatus(for: sessionID)
   }
 
   public distributed func context(for sessionID: RimeSessionID) async throws(RimeError)
     -> RimeContext?
   {
-    try engine.context(for: sessionID)
+    try engineContext(for: sessionID)
   }
 
   // MARK: 选项 / 属性
@@ -173,43 +199,43 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func option(named option: String, for sessionID: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.option(named: option, for: sessionID)
+    try engineOption(named: option, for: sessionID)
   }
 
   public distributed func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID)
     async throws(RimeError)
   {
-    try engine.setOption(option, value: value, for: sessionID)
+    try engineSetOption(option, value: value, for: sessionID)
   }
 
   public distributed func property(named property: String, for sessionID: RimeSessionID)
     async throws(RimeError) -> String?
   {
-    try engine.property(named: property, for: sessionID)
+    try engineProperty(named: property, for: sessionID)
   }
 
   public distributed func setProperty(
     _ property: String, value: String, for sessionID: RimeSessionID
   ) async throws(RimeError) {
-    try engine.setProperty(property, value: value, for: sessionID)
+    try engineSetProperty(property, value: value, for: sessionID)
   }
 
   // MARK: Schema
 
   public distributed func schemaList() async throws(RimeError) -> RimeSchemaList {
-    try engine.schemaList
+    try engineSchemaList
   }
 
   public distributed func currentSchema(for sessionID: RimeSessionID) async throws(RimeError)
     -> String?
   {
-    try engine.currentSchema(for: sessionID)
+    try engineCurrentSchema(for: sessionID)
   }
 
   public distributed func selectSchema(_ schemaID: String, for sessionID: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.selectSchema(schemaID, for: sessionID)
+    try engineSelectSchema(schemaID, for: sessionID)
   }
 
   // MARK: 配置打开
@@ -217,17 +243,17 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func openSchema(_ schemaID: String) async throws(RimeError) -> ObjectHandle<
     RimeConfig
   >? {
-    try engine.openSchema(schemaID)
+    try engineOpenSchema(schemaID: schemaID)
   }
 
   public distributed func openConfig(_ configID: String) async throws(RimeError) -> ObjectHandle<
     RimeConfig
   >? {
-    try engine.openConfig(configID)
+    try engineOpenConfig(configID: configID)
   }
 
   public distributed func close(config: ObjectHandle<RimeConfig>) async throws(RimeError) -> Bool {
-    try engine.close(config: config)
+    try engineClose(config: config)
   }
 
   // MARK: 配置读写
@@ -235,164 +261,164 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func string(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> String?
   {
-    try engine.string(forKey: key, in: config)
+    try engineString(forKey: key, in: config)
   }
 
   public distributed func int(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Int32?
   {
-    try engine.int(forKey: key, in: config)
+    try engineInt(forKey: key, in: config)
   }
 
   public distributed func bool(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Bool?
   {
-    try engine.bool(forKey: key, in: config)
+    try engineBool(forKey: key, in: config)
   }
 
   public distributed func double(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Double?
   {
-    try engine.double(forKey: key, in: config)
+    try engineDouble(forKey: key, in: config)
   }
 
   public distributed func item(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> ObjectHandle<RimeConfig>?
   {
-    try engine.item(forKey: key, in: config)
+    try engineItem(forKey: key, in: config)
   }
 
   public distributed func set(
     _ value: String, forKey key: String, in config: ObjectHandle<RimeConfig>
   ) async throws(RimeError) -> Bool {
-    try engine.set(value, forKey: key, in: config)
+    try engineSet(value: value, forKey: key, in: config)
   }
 
   public distributed func set(
     _ value: Int32, forKey key: String, in config: ObjectHandle<RimeConfig>
   ) async throws(RimeError) -> Bool {
-    try engine.set(value, forKey: key, in: config)
+    try engineSet(value: value, forKey: key, in: config)
   }
 
   public distributed func set(
     _ value: Bool, forKey key: String, in config: ObjectHandle<RimeConfig>
   ) async throws(RimeError) -> Bool {
-    try engine.set(value, forKey: key, in: config)
+    try engineSet(value: value, forKey: key, in: config)
   }
 
   public distributed func set(
     _ value: Double, forKey key: String, in config: ObjectHandle<RimeConfig>
   ) async throws(RimeError) -> Bool {
-    try engine.set(value, forKey: key, in: config)
+    try engineSet(value: value, forKey: key, in: config)
   }
 
   public distributed func set(
     _ value: ObjectHandle<RimeConfig>, forKey key: String, in config: ObjectHandle<RimeConfig>
   ) async throws(RimeError) -> Bool {
-    try engine.set(value, forKey: key, in: config)
+    try engineSet(value: value, forKey: key, in: config)
   }
 
   public distributed func removeValue(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Bool
   {
-    try engine.removeValue(forKey: key, in: config)
+    try engineRemoveValue(forKey: key, in: config)
   }
 
   public distributed func update(signature: String, for config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Bool
   {
-    try engine.update(signature: signature, for: config)
+    try engineUpdate(signature: signature, for: config)
   }
 
   public distributed func beginMap(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> ObjectHandle<RimeConfigIterator>
   {
-    try engine.beginMap(forKey: key, in: config)
+    try engineBeginMap(forKey: key, in: config)
   }
 
   public distributed func beginList(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> ObjectHandle<RimeConfigIterator>
   {
-    try engine.beginList(forKey: key, in: config)
+    try engineBeginList(forKey: key, in: config)
   }
 
   public distributed func advanceConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>)
     async throws(RimeError) -> RimeConfigLocation?
   {
-    try engine.advanceConfigIterator(iterator)
+    try engineAdvanceConfigIterator(iterator)
   }
 
   public distributed func endConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>)
     async throws(RimeError)
   {
-    try engine.endConfigIterator(iterator)
+    try engineEndConfigIterator(iterator)
   }
 
   public distributed func makeConfig() async throws(RimeError) -> ObjectHandle<RimeConfig> {
-    try engine.makeConfig()
+    try engineMakeConfig()
   }
 
   public distributed func load(yaml: String, into config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Bool
   {
-    try engine.load(yaml: yaml, into: config)
+    try engineLoad(yaml: yaml, into: config)
   }
 
   public distributed func createList(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Bool
   {
-    try engine.createList(forKey: key, in: config)
+    try engineCreateList(forKey: key, in: config)
   }
 
   public distributed func createMap(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Bool
   {
-    try engine.createMap(forKey: key, in: config)
+    try engineCreateMap(forKey: key, in: config)
   }
 
   public distributed func listSize(forKey key: String, in config: ObjectHandle<RimeConfig>)
     async throws(RimeError) -> Int
   {
-    try engine.listSize(forKey: key, in: config)
+    try engineListSize(forKey: key, in: config)
   }
 
   // MARK: 身份 / 目录
 
   public distributed func userID() async throws(RimeError) -> String {
-    try engine.userID
+    try engineUserID
   }
 
   public distributed func userDataSyncDirectory() async throws(RimeError) -> String {
-    try engine.userDataSyncDirectory
+    try engineUserDataSyncDirectory
   }
 
   // MARK: 输入 / 光标
 
   public distributed func input(for sessionID: RimeSessionID) async throws(RimeError) -> String? {
-    try engine.input(for: sessionID)
+    try engineInput(for: sessionID)
   }
 
   public distributed func set(input: String, for sessionID: RimeSessionID) async throws(RimeError)
     -> Bool
   {
-    try engine.set(input: input, for: sessionID)
+    try engineSet(input: input, for: sessionID)
   }
 
   public distributed func caretPosition(for sessionID: RimeSessionID) async throws(RimeError) -> Int
   {
-    try engine.caretPosition(for: sessionID)
+    try engineCaretPosition(for: sessionID)
   }
 
   public distributed func set(caretPosition: Int, for sessionID: RimeSessionID)
     async throws(RimeError)
   {
-    try engine.set(caretPosition: caretPosition, for: sessionID)
+    try engineSet(caretPosition: caretPosition, for: sessionID)
   }
 
   // MARK: 版本
 
   public distributed func version() async throws(RimeError) -> String {
-    try engine.version
+    try engineVersion
   }
 
   // MARK: 候选(页式)
@@ -400,13 +426,13 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func selectCandidate(at index: Int, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.selectCandidate(at: index, for: session)
+    try engineSelectCandidate(at: index, for: session)
   }
 
   public distributed func selectCandidateOnCurrentPage(at index: Int, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.selectCandidateOnCurrentPage(at: index, for: session)
+    try engineSelectCandidateOnCurrentPage(at: index, for: session)
   }
 
   // MARK: 候选(句柄式)
@@ -414,31 +440,31 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func beginCandidates(for session: RimeSessionID) async throws(RimeError)
     -> ObjectHandle<RimeCandidate>
   {
-    try engine.beginCandidates(for: session)
+    try engineBeginCandidates(for: session)
   }
 
   public distributed func advanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>)
     async throws(RimeError) -> RimeCandidate?
   {
-    try engine.advanceCandidateIterator(iterator)
+    try engineAdvanceCandidateIterator(iterator)
   }
 
   public distributed func endCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>)
     async throws(RimeError)
   {
-    try engine.endCandidateIterator(iterator)
+    try engineEndCandidateIterator(iterator)
   }
 
   public distributed func openUserConfig(configId: String) async throws(RimeError) -> ObjectHandle<
     RimeConfig
   >? {
-    try engine.openUserConfig(configId: configId)
+    try engineOpenUserConfig(configId: configId)
   }
 
   public distributed func candidateList(fromIndex: Int32, for sessionID: RimeSessionID)
     async throws(RimeError) -> ObjectHandle<RimeCandidate>?
   {
-    try engine.candidateList(fromIndex: fromIndex, for: sessionID)
+    try engineCandidateList(fromIndex: fromIndex, for: sessionID)
   }
 
   // MARK: 状态标签
@@ -446,13 +472,13 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func stateLabel(for key: String, state: RimeState, in session: RimeSessionID)
     async throws(RimeError) -> String?
   {
-    try engine.stateLabel(for: key, state: state, in: session)
+    try engineStateLabel(for: key, state: state, in: session)
   }
 
   public distributed func stateLabel(
     for key: String, state: RimeState, abbreviated: Bool, in session: RimeSessionID
   ) async throws(RimeError) -> String? {
-    try engine.stateLabel(for: key, state: state, abbreviated: abbreviated, in: session)
+    try engineStateLabel(for: key, state: state, abbreviated: abbreviated, in: session)
   }
 
   // MARK: 候选编辑 / 翻页
@@ -460,52 +486,56 @@ public distributed actor RimeServiceRoot: XPCRootActor {
   public distributed func removeCandidate(at index: Int, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.removeCandidate(at: index, for: session)
+    try engineRemoveCandidate(at: index, for: session)
   }
 
   public distributed func removeCandidateOnCurrentPage(at index: Int, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.removeCandidateOnCurrentPage(at: index, for: session)
+    try engineRemoveCandidateOnCurrentPage(at: index, for: session)
   }
 
   public distributed func highlightCandidate(at index: Int, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.highlightCandidate(at: index, for: session)
+    try engineHighlightCandidate(at: index, for: session)
   }
 
   public distributed func highlightCandidateOnCurrentPage(at index: Int, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.highlightCandidateOnCurrentPage(at: index, for: session)
+    try engineHighlightCandidateOnCurrentPage(at: index, for: session)
   }
 
   public distributed func page(_ direction: RimePageDirection, for session: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engine.page(direction, for: session)
+    try enginePage(direction, for: session)
   }
 
   // MARK: 目录
 
   public distributed func sharedDataDirectory() async throws(RimeError) -> String {
-    try engine.sharedDataDirectory
+    try engineSharedDataDirectory
   }
 
   public distributed func userDataDirectory() async throws(RimeError) -> String {
-    try engine.userDataDirectory
+    try engineUserDataDirectory
   }
 
   public distributed func prebuiltDataDirectory() async throws(RimeError) -> String {
-    try engine.prebuiltDataDirectory
+    try enginePrebuiltDataDirectory
   }
 
   public distributed func stagingDirectory() async throws(RimeError) -> String {
-    try engine.stagingDirectory
+    try engineStagingDirectory
   }
 
   public distributed func syncDirectory() async throws(RimeError) -> String {
-    try engine.syncDirectory
+    try engineSyncDirectory
   }
 }
+
+#if os(macOS)
+extension RimeServiceRoot: XPCRootActor {}
+#endif

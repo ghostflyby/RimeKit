@@ -6,14 +6,14 @@ public struct RimeCommit: Sendable, Codable {
 
 extension RimeSession {
   public var commit: RimeCommit? {
-    get throws(RimeError) {
-      try engine.commit(for: sessionID)
+    get async throws {
+      try await root.commit(for: sessionID)
     }
   }
 
   public var commitText: String? {
-    get throws(RimeError) {
-      try engine.commit(for: sessionID)?.text
+    get async throws {
+      try await root.commit(for: sessionID)?.text
     }
   }
 }
@@ -24,8 +24,8 @@ extension RimeCommit {
   }
 }
 
-extension RimeEngine {
-  public func commit(for sessionID: RimeSessionID) throws(RimeError) -> RimeCommit? {
+extension RimeServiceRoot {
+  func engineCommit(for sessionID: RimeSessionID) throws(RimeError) -> RimeCommit? {
     var commit = rime_commit_t.rimeStructInit()
     defer { _ = rimeApi.free_commit(&commit) }
     guard rimeApi.get_commit(sessionID.rawValue, &commit) else {
