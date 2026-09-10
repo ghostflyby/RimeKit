@@ -1,0 +1,64 @@
+name: Cicada
+options:
+  bundleIdPrefix: dev.ghostflyby
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+packages:
+  RimeKit:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+targets:
+  Cicada:
+    type: application
+    platform: macOS
+    sources:
+      - path: Cicada
+    settings:
+      # RimeDynamic 的 macOS slice 为浅包布局(librime-xcframework 打包形态),
+      # Xcode 16 嵌入校验会拒绝;dyld 经 symlink 加载不受影响——嵌入后重整为深包。
+      VALIDATE_WORKSPACE: NO
+    postBuildScripts:
+      - name: 修正 RimeDynamic 浅包布局(嵌入后)
+        script: |
+          FW="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/RimeDynamic.framework"
+          [ -d "$FW" ] || exit 0
+          [ -e "$FW/Versions" ] && exit 0
+          mkdir -p "$FW/Versions/A/Resources"
+          mv "$FW/RimeDynamic" "$FW/Versions/A/RimeDynamic"
+          mv "$FW/Info.plist" "$FW/Versions/A/Resources/Info.plist"
+          for d in Headers Modules PrivateHeaders; do
+            [ -d "$FW/$d" ] && mv "$FW/$d" "$FW/Versions/A/$d"
+          done
+          ln -s A "$FW/Versions/Current"
+          ln -s "Versions/Current/RimeDynamic" "$FW/RimeDynamic"
+          ln -s "Versions/Current/Resources" "$FW/Resources"
+    dependencies:
+      - package: RimeKit
+      - target: RimeService.blue
+        embed: true
+      - target: RimeService.green
+        embed: true
+    info:
+      path: Cicada/Info.plist
+  RimeService.blue:
+    type: xpc-service
+    platform: macOS
+    sources:
+      - path: RimeService.blue/main.swift
+    dependencies:
+      - package: RimeKit
+    info:
+      path: RimeService.blue/Info.plist
+  RimeService.green:
+    type: xpc-service
+    platform: macOS
+    sources:
+      - path: RimeService.green/main.swift
+    dependencies:
+      - package: RimeKit
+    info:
+      path: RimeService.green/Info.plist

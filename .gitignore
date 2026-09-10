@@ -8,3 +8,8 @@ DerivedData/
 .netrc
 
 /.vscode
+# Xcode
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+*.xcuserstate
+DerivedData/
