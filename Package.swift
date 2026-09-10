@@ -22,9 +22,9 @@ let package = Package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.16.1-pack.8",
       // traits: [.trait(name: "dynamic")]
     ),
-    // 开发期本地 path 依赖;发布切 tag(from: "0.2.0")。
+    // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
-    .package(path: "../SwiftXPC")
+    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.3.2")
   ],
   targets: [
     .target(

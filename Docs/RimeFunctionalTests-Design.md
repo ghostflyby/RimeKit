@@ -3,7 +3,8 @@
 - 状态:交付稿(测试基建 + 七个功能套件全绿;iOS destination 构建守护回绿)
 - 日期:2026-09-10
 - 依赖基线:librime-xcframework 1.16.1-pack.8;Swift 6.3.3 工具链内置 Swift Testing;
-  SwiftXPC 本地包(需含 `wire-fixes-for-rimekit-e2e` 分支的两处线缆修复,见 §7)
+  SwiftXPC ≥ 0.3.2(自 v0.3.2 起为正式远程依赖,含 §7 两处线缆修复 + base 前缀元数据回退;
+  此前为本地 path 依赖 + `wire-fixes-for-rimekit-e2e` 分支)
 - 运行:`swift test`(macOS);iOS 守护:`swift build --destination <ios.json>`(v2 schema 见文末附录)
 
 ## 0. 参考来源(调研结论)
