@@ -72,7 +72,7 @@ struct RimeEngineSmokeTests {
     let root = RimeServiceRoot.localShared
     let foreign = ObjectHandle<RimeKit.RimeConfig>()
     await #expect(throws: RimeError.invalidHandle(kind: .config, id: foreign.id)) {
-      _ = try engine.string(forKey: "x", in: foreign)
+      _ = try await root.string(forKey: "x", in: foreign)
     }
   }
 
@@ -86,7 +86,7 @@ struct RimeEngineSmokeTests {
     let root = RimeServiceRoot.localShared
     let foreign = ObjectHandle<RimeKit.RimeConfig>()
     do {
-      _ = try engine.string(forKey: "x", in: foreign)
+      _ = try await root.string(forKey: "x", in: foreign)
       Issue.record("expected throw")
     } catch {
       #expect((error as? RimeError) == .invalidHandle(kind: .config, id: foreign.id))

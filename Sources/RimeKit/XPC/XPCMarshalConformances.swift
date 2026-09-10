@@ -302,11 +302,13 @@ extension RimeState: XPCMarshal {
   }
 
   public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeState {
-    switch try Int.unmarshal(from: object) {
+    let f = try fields(object, minimum: 1)
+    guard f.count == 1 else { throw XPCMarshalError.outOfBounds(index: f.count, count: 1) }
+    switch try Int.unmarshal(from: f[0]) {
     case 0: return .on
     case 1: return .off
     default:
-      throw XPCMarshalError.unknownEnumCase("RimeState tag", enumName: "RimeState")
+      throw XPCMarshalError.unknownEnumCase(String(f.count), enumName: "RimeState")
     }
   }
 }
@@ -317,11 +319,13 @@ extension RimePageDirection: XPCMarshal {
   }
 
   public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimePageDirection {
-    switch try Int.unmarshal(from: object) {
+    let f = try fields(object, minimum: 1)
+    guard f.count == 1 else { throw XPCMarshalError.outOfBounds(index: f.count, count: 1) }
+    switch try Int.unmarshal(from: f[0]) {
     case 0: return .forward
     case 1: return .backward
     default:
-      throw XPCMarshalError.unknownEnumCase("RimePageDirection tag", enumName: "RimePageDirection")
+      throw XPCMarshalError.unknownEnumCase(String(f.count), enumName: "RimePageDirection")
     }
   }
 }
