@@ -271,4 +271,9 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
   以非默认方案起步)——"新会话默认方案"类断言须先显式归位再断言。
 - `RimeGlobalNotificationHook`(直接 C 注册)用 `NSLock` 而非 `Mutex`:
   `Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建守护实证)。
+- **上游欠账已结**:SwiftXPC 0.4.0 的 `distributedXPCMain` 原生带
+  `peerCodeSigningRequirement`(内核强制、激活前安装、不静默降级)与
+  `shouldAccept`/`onPeerAccept`/`onPeerEnd`/`onPeerReject` 全套钩子,
+  `serveXPC` 已改为直接透传(此前的 pid/euid 手装兜底随之移除);
+  客户端侧 `connect(toService:peerCodeSigningRequirement:)` 可核验服务身份。
 - 退役通知 Box 保留强引用至进程结束,避免在途回调悬垂;安装次数有界,开销可忽略。

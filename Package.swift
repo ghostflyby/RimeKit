@@ -24,7 +24,7 @@ let package = Package(
     ),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
-    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.3.2")
+    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.4.0")
   ],
   targets: [
     .target(

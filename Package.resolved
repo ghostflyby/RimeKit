@@ -1,5 +1,5 @@
 {
-  "originHash" : "87a4696df6aed14ee27be9d093d9c835c94f8bb97135da718dcc21a830d198ec",
+  "originHash" : "16196337953fcf9bdb9fb1910342a75f9da7efd0e7b0a3405a3807de2246a617",
   "pins" : [
     {
       "identity" : "librime-xcframework",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ghostflyby/SwiftXPC.git",
       "state" : {
-        "revision" : "8dab471fa0e1ec33d77845a4cfcf19841b361c29",
-        "version" : "0.3.2"
+        "revision" : "b4244a6f548c4157b90dd9165ce1ad5dda51d449",
+        "version" : "0.4.0"
       }
     }
   ],
