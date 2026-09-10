@@ -203,11 +203,12 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 
 `swift build --destination ios.json` → 整包(含 RimeKitRimeService)构建回绿。
 
-## 8. 调查与落地:`setNotificationSink` 泛化为闭包输入 API(`RimeNotificationSubscription`)
+## 8. 调查与落地:`setNotificationSink` 泛化为闭包输入扩展函数
 
-**结论:已落地**(2026-09-10)。公开面收敛为 `RimeNotificationSubscription`(闭包输入,
-`attach(to:)`/`detach(from:)`);`RimeNotificationSink` 与 `setNotificationSink` 均为
-**internal 实现细节**(负向编译探针实证外部不可见)。
+**结论:已落地**(2026-09-10)。公开面为 `RimeServiceRoot` 上的闭包参数扩展函数:
+`try await root.setNotificationHandler { session, type, value in … }`(`nil` = 退订);
+`RimeNotificationSink` 与 `setNotificationSink` 均为 **internal 实现细节**(负向编译
+探针实证外部不可见)。
 
 ### 8.1 一条硬约束决定 API 形态
 
@@ -245,5 +246,29 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 - **新建会话继承进程级"最后选择的方案"**(实证:并行套件切方案时,新会话可能
   以非默认方案起步)——"新会话默认方案"类断言须先显式归位再断言。
 - `RimeGlobalNotificationHook`(iOS 直接 C 注册)用 `NSLock` 而非 `Mutex`:
+  `Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建守护实证)。
+- 退役通知 Box 保留强引用至进程结束,避免在途回调悬垂;安装次数有界,开销可忽略。
+
+## 9. 落地补充(2026-09-10,通知订阅实现)
+
+- **公开 API 为 `nonisolated` 扩展函数而非订阅类型**:nonisolated 成员可在远程
+  代理上调用(isolated 非 distributed 成员被编译器拒绝),故
+  `setNotificationHandler(_:)` 以 `nonisolated func` 形式落在
+  `RimeServiceRoot` 扩展上,本地/远程引用同一调用点。
+- **本地性判定**:语言层无 `isRemote`(提案评审移除),用 system 注册表判定——
+  `actorSystem.resolve(id:as:)` 能查到本 actor 即本地,否则远程。
+  iOS(RimeLocalSystem)恒为本地。
+- **macOS 本地引用也直接 C 注册**(librime 回调线程同步执行,Squirrel 同型;
+  严禁闭包重入引擎);远程引用自动转内部 sink actor 订阅,闭包经线缆回流。
+  共享宿主 system 进程级一份(sink 每次设置重建,避免 mach port 开销)。
+- **`@XPCService` 宏枚举不到 `#if` 包裹的成员**(宏在 `#if` 求值前的语法树上
+  扫描直接成员,实证:`setNotificationSink` 曾长期缺席元数据白表,线缆调用
+  一律 unknownTarget)。涉及平台条件化声明的分布式方法,声明体不得包 `#if`。
+- **订阅退订(`setNotificationSink(nil)`)会清进程级 C 钩子**(全局单槽),
+  测试套件据此在退订后即时重装环境收集器,并把 NotificationTests 设为
+  `.serialized`。
+- **新建会话继承进程级"最后选择的方案"**(实证:并行套件切方案时,新会话可能
+  以非默认方案起步)——"新会话默认方案"类断言须先显式归位再断言。
+- `RimeGlobalNotificationHook`(直接 C 注册)用 `NSLock` 而非 `Mutex`:
   `Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建守护实证)。
 - 退役通知 Box 保留强引用至进程结束,避免在途回调悬垂;安装次数有界,开销可忽略。

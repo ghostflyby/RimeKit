@@ -61,18 +61,17 @@ struct NotificationTests {
     #expect(primaryNotified)
   }
 
-  /// 闭包订阅(`RimeNotificationSubscription`)的回流与退订。
+  /// 闭包订阅扩展函数(`setNotificationHandler`)的回流与退订。
   @Test(arguments: RimeBackend.allCases)
-  func subscriptionReceivesAndStopsAfterDetach(backend: RimeBackend) async throws {
+  func notificationHandlerReceivesAndStopsAfterClear(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let sessionID = session.sessionID
 
     let received = RimeNotificationLog()
-    let subscription = RimeNotificationSubscription { _, type, value in
+    try await env.root.setNotificationHandler { _, type, value in
       received.append(session: sessionID, type: type, value: value)
     }
-    try await subscription.attach(to: env.root)
 
     try await session.setOption("ascii_mode", value: true)
     let turnedOn = await received.waitFor {
@@ -80,14 +79,14 @@ struct NotificationTests {
     }
     #expect(turnedOn)
 
-    // 退订后不再接收(留出竞态窗口再验证)。
-    try await subscription.detach(from: env.root)
+    // 退订(nil)后不再接收(留出竞态窗口再验证)。
+    try await env.root.setNotificationHandler(nil)
     let marker = received.snapshot.count
     try await session.setOption("ascii_mode", value: false)
     try await Task.sleep(for: .milliseconds(150))
     #expect(received.snapshot.count == marker)
 
-    // macOS 路径的 detach 会清进程级 handler(全局单槽),即时恢复环境收集器,
+    // 退订会清进程级 handler(全局单槽),即时恢复环境收集器,
     // 否则并行套件的通知断言(以及本套件后续用例)失去数据源。
     env.reinstallNotificationCollector()
   }
