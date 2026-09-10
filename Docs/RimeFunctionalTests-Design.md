@@ -202,3 +202,29 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 ```
 
 `swift build --destination ios.json` → 整包(含 RimeKitRimeService)构建回绿。
+
+## 8. 调查:`setNotificationSink` 泛化为闭包输入 API 的可行性
+
+**结论:能做到,关键路径已双平台编译 + 运行时实证**(2026-09-10,探针后已回滚源码,留作实现蓝图)。
+
+### 8.1 一条硬约束决定 API 形态
+
+闭包输入的入口**不能是根 actor 上的方法**:① 分布式方法参数必须满足线缆序列化,闭包不可过线;② `engineSetNotificationHandler` 是 isolated 非 distributed 成员,不可经"潜在远程"引用调用(编译器拒绝)。故"包装"必然是**客户端侧订阅类型**(如 `RimeNotificationSubscription(handle:)`),内部按平台分派,对外只有 `attach(to:)` / `detach(from:)`。
+
+### 8.2 Remote 路径:平台中立 sink(已实证)
+
+- `RimeNotificationSink` 平台中立化:`ActorSystem` 条件 typealias(macOS=XPCDistributedActorSystem + `@XPCService`;iOS=RimeLocalSystem,无宏——`XPCDistributedTargetMetadataProviding` 等协议被 `ActorSystem == XPCDistributedActorSystem` 约束锁死在 XPC 侧,iOS 无需白表)。`emit` 参数(`RimeSessionID`/`RimeNotificationType`/`String`)双线缆要求均已满足。
+- `RimeServiceRoot.setNotificationSink` 去 `#if os(macOS)`:iOS 侧参数需补 `RimeNotificationSink: RimeLocalWire` 标记一致性。
+- 宿主侧自建匿名 `XPCDistributedActorSystem` 承载 sink(§5.3-V1 结论),sink 引用过线由服务端回流。**运行时探针实证**:经进程内连接对,`setOption` 触发的 `option/ascii_mode`、`option/!ascii_mode` 两条通知到达客户端闭包;`setNotificationSink(nil)` 分离正常(nil Optional 过线依赖 v0.3.2 修复)。
+- 顺序性:sink actor 序列化 `emit`,通知顺序保持。
+
+### 8.3 本地/iOS 路径:直接回调 = 直接 C 注册
+
+"通过根 actor 直接注册闭包"不可行(8.1),但 librime 是进程全局单 handler,iOS/进程内场景**绕过 actor 直接 C 注册**即为字面意义的直接回调——测试基建的 `RimeNotificationLog.installCollector` 就是此形态的现成证明。语义约束:进程级单槽(二次 attach 即替换/或拒绝,需文档化);detach 恢复 NULL。macOS 分支统一走 sink 路径(本地根同样适用,额外一跳 actor 序列化,无语义差异)。
+
+### 8.4 实现清单(蓝图,约 3 文件)
+
+1. `RimeNotificationSink` 平台中立化(条件 ActorSystem + 条件 `@XPCService`,可用性 `@available(macOS 15, iOS 16, *)`);
+2. `RimeServiceRoot.setNotificationSink` 去 `#if`(iOS 分支 sink 生命周期由订阅持有,根不 retain);
+3. 新增客户端订阅类型 + `RimeLocalWire` 一致性;macOS attach = 自建 system + sink + 过线订阅,iOS attach = 直接 C 注册;
+4. 测试:双后端 sink 回流(探针 B 已验证)、iOS destination 编译守护(探针 A 已验证)。
