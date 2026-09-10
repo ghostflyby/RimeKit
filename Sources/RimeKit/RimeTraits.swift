@@ -79,7 +79,9 @@ extension RimeTraits {
     c.distribution_code_name = handle.add(distributionCodeName)
     c.distribution_version = handle.add(distributionVersion)
     c.app_name = handle.add(appName)
-    c.modules = handle.add(modules)
+    // 空模块表必须写 NULL:librime 以 NULL 表示"加载全部内建模块"(Squirrel 缺省
+    // 即此形态);非 NULL 的零项数组则一个模块都不加载,引擎因缺组件而瘫痪。
+    c.modules = modules.isEmpty ? nil : handle.add(modules)
     c.min_log_level = minLogLevel.rawValue
     c.log_dir = handle.add(logDir)
     c.prebuilt_data_dir = handle.add(prebuiltDataDir)

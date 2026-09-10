@@ -18,8 +18,10 @@ public struct RimeSchemaList: Sendable, Codable {
 
 extension RimeSchemaList {
   fileprivate init(_ cStruct: RimeDynamic.RimeSchemaList) {
-    let buffer = UnsafeBufferPointer(start: cStruct.list, count: Int(cStruct.size))
-    items = buffer.map { RimeSchemaListItem($0) }
+    // 空表时 librime 不分配 list 数组(nil):按空表处理,不得强解包。
+    items = cStruct.list.map { pointer in
+      UnsafeBufferPointer(start: pointer, count: Int(cStruct.size)).map { RimeSchemaListItem($0) }
+    } ?? []
   }
 }
 
