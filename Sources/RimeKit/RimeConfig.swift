@@ -5,7 +5,7 @@ import RimeDynamic
 /// 保持 Copyable:线缆序列化(XPCMarshal)要求句柄类型可复制传递。
 public enum RimeConfigIterator: Sendable {}
 
-public struct ObjectHandle<T: ~Copyable>: Sendable, Codable, Hashable {
+public struct ObjectHandle<T>: Sendable, Codable, Hashable {
   private let rawValue: UUID
   internal init() {
     rawValue = UUID()
