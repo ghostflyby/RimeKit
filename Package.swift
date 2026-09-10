@@ -43,6 +43,9 @@ let package = Package(
       name: "RimeKitTests",
       dependencies: [
         "RimeKit",
+        // 测试基建直挂 librime C API 注册全局通知回调(Squirrel setupRime 同型;
+        // 根 actor 的非 distributed 成员不可经远程引用触达,通知收集走进程级 C 钩子)。
+        .product(name: "RimeDynamic", package: "librime-xcframework"),
         .product(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS])),
