@@ -10,22 +10,22 @@ extension RimeSession {
   }
 
   public func candidates(startingAt index: Int32) -> AsyncStream<RimeCandidate> {
-    let engine = self.engine
+    let root = self.root
     let sessionID = self.sessionID
     return AsyncStream {
       continuation in
       Task {
-        guard let iter = await engine.candidateList(fromIndex: index, for: sessionID) else {
+        guard let iter = try? await root.candidateList(fromIndex: index, for: sessionID) else {
           continuation.finish()
           return
         }
         continuation.onTermination = { @Sendable _ in
-          Task { await engine.endCandidateIterator(iter) }
+          Task { try? await root.endCandidateIterator(iter) }
         }
-        while let candidate = await engine.advanceCandidateIterator(iter) {
+        while let candidate = try? await root.advanceCandidateIterator(iter) {
           continuation.yield(candidate)
         }
-        await engine.endCandidateIterator(iter)
+        try? await root.endCandidateIterator(iter)
         continuation.finish()
       }
     }
@@ -43,23 +43,33 @@ extension RimeConfig {
   }
 
   private func beginIteration(forKey key: String, mode: Mode) -> AsyncStream<RimeConfigLocation> {
-    let engine = self.engine
+    let root = self.root
+    let handle = self.handle
     return AsyncStream {
       continuation in
       Task {
-        let iter =
-          if mode == .list {
-            await engine.beginList(forKey: key, in: handle)
+        let iter: ObjectHandle<RimeConfigIterator>?
+        do {
+          iter = if mode == .list {
+            try await root.beginList(forKey: key, in: handle)
           } else {
-            await engine.beginMap(forKey: key, in: handle)
+            try await root.beginMap(forKey: key, in: handle)
           }
-        continuation.onTermination = { @Sendable _ in
-          Task { await engine.endConfigIterator(iter) }
+        } catch {
+          continuation.finish()
+          return
         }
-        while let loc = await engine.advanceConfigIterator(iter) {
+        guard let iter else {
+          continuation.finish()
+          return
+        }
+        continuation.onTermination = { @Sendable _ in
+          Task { try? await root.endConfigIterator(iter) }
+        }
+        while let loc = try? await root.advanceConfigIterator(iter) {
           continuation.yield(loc)
         }
-        await engine.endConfigIterator(iter)
+        try? await root.endConfigIterator(iter)
         continuation.finish()
       }
     }

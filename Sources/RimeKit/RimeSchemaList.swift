@@ -1,4 +1,4 @@
-import CLibrime
+import RimeDynamic
 
 public struct RimeSchemaListItem: Sendable, Codable {
   let schemaID: String
@@ -6,7 +6,7 @@ public struct RimeSchemaListItem: Sendable, Codable {
 }
 
 extension RimeSchemaListItem {
-  fileprivate init(_ cStruct: CLibrime.RimeSchemaListItem) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeSchemaListItem) {
     schemaID = String(cString: cStruct.schema_id)
     name = String(cString: cStruct.name)
   }
@@ -17,23 +17,25 @@ public struct RimeSchemaList: Sendable, Codable {
 }
 
 extension RimeSchemaList {
-  fileprivate init(_ cStruct: CLibrime.RimeSchemaList) {
+  fileprivate init(_ cStruct: RimeDynamic.RimeSchemaList) {
     let buffer = UnsafeBufferPointer(start: cStruct.list, count: Int(cStruct.size))
     items = buffer.map { RimeSchemaListItem($0) }
   }
 }
 
-extension RimeEngine {
-  public var schemaList: RimeSchemaList {
+extension RimeServiceRoot {
+  var engineSchemaList: RimeSchemaList {
+    get throws(RimeError) {
     var schemaList = rime_schema_list_t()
     defer { rimeApi.free_schema_list(&schemaList) }
     guard rimeApi.get_schema_list(&schemaList) else {
       return RimeSchemaList(items: [])
     }
     return RimeSchemaList(schemaList)
+    }
   }
 
-  public func currentSchema(for sessionID: RimeSessionID) -> String? {
+  func engineCurrentSchema(for sessionID: RimeSessionID) throws(RimeError) -> String? {
     let bufferSize = 1024
     let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
     return buffer.withUnsafeBufferPointer { pointer in
@@ -50,29 +52,29 @@ extension RimeEngine {
     }
   }
 
-  public func selectSchema(_ schemaID: String, for sessionID: RimeSessionID) -> Bool {
+  func engineSelectSchema(_ schemaID: String, for sessionID: RimeSessionID) throws(RimeError) -> Bool {
     rimeApi.select_schema(sessionID.rawValue, schemaID)
   }
 }
 
 extension RimeSession {
   public var schemaList: RimeSchemaList {
-    get async {
-      await engine.schemaList
+    get async throws {
+      try await root.schemaList()
     }
   }
 
   public var schemas: [RimeSchemaListItem] {
-    get async {
-      await engine.schemaList.items
+    get async throws {
+      try await root.schemaList().items
     }
   }
 
-  public func selectSchema(id schemaID: String) async -> Bool {
-    await engine.selectSchema(schemaID, for: sessionID)
+  public func selectSchema(id schemaID: String) async throws -> Bool {
+    try await root.selectSchema(schemaID, for: sessionID)
   }
 
-  public func select(schema: RimeSchemaListItem) async -> Bool {
-    await engine.selectSchema(schema.schemaID, for: sessionID)
+  public func select(schema: RimeSchemaListItem) async throws -> Bool {
+    try await root.selectSchema(schema.schemaID, for: sessionID)
   }
 }

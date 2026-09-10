@@ -1,4 +1,0 @@
-module CLibrime {
-    header "include.h"
-    export *
-}

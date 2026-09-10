@@ -1,0 +1,24 @@
+{
+  "originHash" : "53cd287e43670e4fc788b7dc6e42ba3ccf784176130153665a0077d919eb98df",
+  "pins" : [
+    {
+      "identity" : "librime-xcframework",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ghostflyby/librime-xcframework",
+      "state" : {
+        "revision" : "c3cbebee642a3f880fcd038f03b59842f8a5c7d1",
+        "version" : "1.16.1-pack.8"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-syntax.git",
+      "state" : {
+        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
+        "version" : "603.0.2"
+      }
+    }
+  ],
+  "version" : 3
+}

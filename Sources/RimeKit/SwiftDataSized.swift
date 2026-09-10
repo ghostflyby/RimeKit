@@ -1,5 +1,4 @@
-import CLibrime
-import InputMethodKit
+import RimeDynamic
 
 protocol CDataSized {
   var data_size: Int32 { get set }

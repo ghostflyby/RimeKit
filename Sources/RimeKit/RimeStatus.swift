@@ -1,4 +1,4 @@
-import CLibrime
+import RimeDynamic
 
 public struct RimeStatus: Sendable, Codable {
   let schemaID: String
@@ -10,7 +10,9 @@ public struct RimeStatus: Sendable, Codable {
   let isSimplified: Bool
   let isTraditional: Bool
   let isASCIIPunctuation: Bool
+}
 
+extension RimeStatus {
   fileprivate init(rawValue: rime_status_t_stdbool) {
     schemaID = String(cString: rawValue.schema_id)
     schemaName = String(cString: rawValue.schema_name)
@@ -26,14 +28,14 @@ public struct RimeStatus: Sendable, Codable {
 
 extension RimeSession {
   public var status: RimeStatus? {
-    get async {
-      await engine.status(for: sessionID)
+    get async throws {
+      try await root.status(for: sessionID)
     }
   }
 }
 
-extension RimeEngine {
-  public func status(for sessionID: RimeSessionID) -> RimeStatus? {
+extension RimeServiceRoot {
+  func engineStatus(for sessionID: RimeSessionID) throws(RimeError) -> RimeStatus? {
     var status = rime_status_t_stdbool.rimeStructInit()
     defer { _ = rimeApi.free_status(&status) }
     guard rimeApi.get_status(sessionID.rawValue, &status) else {

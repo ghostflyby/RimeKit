@@ -1,5 +1,5 @@
-import CLibrime
 import Foundation
+import RimeDynamic
 
 public typealias RimeNotificationHandler =
   @Sendable (RimeSessionID, RimeNotificationType, String) -> Void
@@ -14,7 +14,7 @@ final class Box {
 
 private func thunk(
   context: UnsafeMutableRawPointer?,
-  session: CLibrime.RimeSessionId,
+  session: RimeDynamic.RimeSessionId,
   type: UnsafePointer<CChar>?,
   value: UnsafePointer<CChar>?
 ) {
@@ -27,7 +27,7 @@ private func thunk(
   )
 }
 
-public enum RimeNotificationType: Codable {
+public enum RimeNotificationType: Codable, Sendable {
   case schema
   case option
   case deploy
@@ -47,30 +47,30 @@ public enum RimeNotificationType: Codable {
   }
 }
 
-extension RimeEngine {
-  public var notificationHandler: RimeNotificationHandler? {
+extension RimeServiceRoot {
+  var engineNotificationHandler: RimeNotificationHandler? {
     get { opaque?.body }
     set {
       if let newValue {
-        setNotificationHandler(handler: newValue)
+        engineSetNotificationHandler(handler: newValue)
       } else {
-        cancelNotificationHandler()
+        engineCancelNotificationHandler()
       }
     }
   }
 
-  private func setNotificationHandler(handler closure: @escaping RimeNotificationHandler) {
+  private func engineSetNotificationHandler(handler closure: @escaping RimeNotificationHandler) {
     let box = Box(closure)
     let context = Unmanaged.passUnretained(box).toOpaque()
     rimeApi.set_notification_handler(thunk, context)
     opaque = box
   }
 
-  public func setNotificationHandler(_ handler: @escaping RimeNotificationHandler) async {
-    setNotificationHandler(handler: handler)
+  func engineSetNotificationHandler(_ handler: @escaping RimeNotificationHandler) {
+    engineSetNotificationHandler(handler: handler)
   }
 
-  private func cancelNotificationHandler() {
+  private func engineCancelNotificationHandler() {
     guard opaque != nil else { return }
     rimeApi.set_notification_handler(nil, nil)
     opaque = nil
