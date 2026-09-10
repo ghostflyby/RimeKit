@@ -28,7 +28,7 @@ private func thunk(
   )
 }
 
-public enum RimeNotificationType: Codable, Sendable {
+public enum RimeNotificationType: Codable, Sendable, Hashable {
   case schema
   case option
   case deploy

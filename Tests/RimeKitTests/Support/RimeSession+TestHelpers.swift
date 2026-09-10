@@ -37,17 +37,3 @@ func collectAllCandidates(
   try await root.endCandidateIterator(iterator)
   return texts
 }
-
-/// 通知类型等值:产品类型未声明 `Equatable`(case 集稳定性不做兼容承诺),测试内补齐。
-extension RimeNotificationType: Equatable {
-  public static func == (lhs: RimeNotificationType, rhs: RimeNotificationType) -> Bool {
-    switch (lhs, rhs) {
-    case (.schema, .schema), (.option, .option), (.deploy, .deploy):
-      return true
-    case (.unknown(let left), .unknown(let right)):
-      return left == right
-    default:
-      return false
-    }
-  }
-}
