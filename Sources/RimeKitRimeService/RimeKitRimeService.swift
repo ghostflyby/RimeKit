@@ -3,14 +3,13 @@
 // iOS 构建下本目标为空壳(包内守护:仅 macOS 有 XPC,§2.5)。
 
 #if os(macOS)
-import DistributedXPC
 import RimeKit
 
 @main
 @MainActor
 struct RimeKitRimeService {
-  static func main() async {
-      distributedXPCMain(Rime.self)
+  static func main() {
+    Rime.serveXPC()
   }
 }
 #else
