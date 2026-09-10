@@ -6,10 +6,9 @@ import Testing
 /// → `get_context`/`get_commit` 的镜像;数据语义由自造最小方案保证确定性)。
 /// `RimeSession` 为 `~Copyable`:观察值一律先取出局部值再进断言宏。
 @Suite struct TypingTests {
-  let env: RimeTestEnvironment
-  init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-
-  @Test func typedKeysComposeAndPreview() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func typedKeysComposeAndPreview(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
 
     // 每个字母都被引擎消费(未进入 passthrough)。
@@ -32,7 +31,9 @@ import Testing
     #expect(context?.commitTextPreview == MinimalRimeData.nihaoCandidates[0])
   }
 
-  @Test func digitSelectKeyCommitsHighlightedCandidate() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func digitSelectKeyCommitsHighlightedCandidate(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("nihao")
 
@@ -47,7 +48,9 @@ import Testing
     #expect(composing == false)
   }
 
-  @Test func selectCandidateByGlobalIndex() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func selectCandidateByGlobalIndex(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("nihao")
     let handled = try await session.selectCandidate(at: 1)
@@ -56,7 +59,9 @@ import Testing
     #expect(commitText == MinimalRimeData.nihaoCandidates[1])
   }
 
-  @Test func selectCandidateOnCurrentPage() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func selectCandidateOnCurrentPage(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("mmmm")
     let handled = try await session.selectCandidateOnCurrentPage(at: 2)
@@ -65,7 +70,9 @@ import Testing
     #expect(commitText == MinimalRimeData.mmmmCandidates[2])
   }
 
-  @Test func commitCompositionCommitsHighlighted() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func commitCompositionCommitsHighlighted(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("ceshi")
     let handled = try await session.commitComposition()
@@ -74,7 +81,9 @@ import Testing
     #expect(commitText == MinimalRimeData.ceshiCandidates[0])
   }
 
-  @Test func commitCompositionWithoutCompositionIsRefused() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func commitCompositionWithoutCompositionIsRefused(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let handled = try await session.commitComposition()
     let commit = try await session.commit
@@ -82,7 +91,9 @@ import Testing
     #expect(commit == nil)
   }
 
-  @Test func backspaceShrinksComposition() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func backspaceShrinksComposition(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("nihao")
 
@@ -102,7 +113,9 @@ import Testing
     #expect(commitText == "niha")
   }
 
-  @Test func escapeClearsComposition() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func escapeClearsComposition(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("nihao")
 
@@ -116,7 +129,9 @@ import Testing
     #expect(composing == false)
   }
 
-  @Test func clearCompositionAPI() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func clearCompositionAPI(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("ceshi")
     try await session.clearComposition()
@@ -128,7 +143,9 @@ import Testing
     #expect(context?.composition.preedit.isEmpty != false)
   }
 
-  @Test func asciiModePassesKeysThrough() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func asciiModePassesKeysThrough(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     try await session.setOption("ascii_mode", value: true)
 
@@ -156,7 +173,9 @@ import Testing
   /// 快照位置后,恢复的组合与现场键入等价,可继续选取提交。
   /// 注意:光标停在码内(如 5 字输入的光标 3)会改变分段,选取语义随之变化——
   /// 迁移实现必须把快照光标一并恢复,不能只恢复输入串。
-  @Test func inputAndCaretSnapshotRoundTrip() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func inputAndCaretSnapshotRoundTrip(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let restored = try await session.set(input: "nihao")
     #expect(restored == true)
@@ -178,7 +197,9 @@ import Testing
     #expect(commitText == MinimalRimeData.nihaoCandidates[0])
   }
 
-  @Test func unhandledKeyReturnsFalse() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func unhandledKeyReturnsFalse(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     // F12(0xFFC6)无任何部件绑定:未消费即透传。
     let handled = try await session.processKey(0xFFC6, modifierMask: 0)

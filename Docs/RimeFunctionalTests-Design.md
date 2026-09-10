@@ -2,7 +2,8 @@
 
 - 状态:交付稿(测试基建 + 七个功能套件全绿;iOS destination 构建守护回绿)
 - 日期:2026-09-10
-- 依赖基线:librime-xcframework 1.16.1-pack.8;Swift 6.3.3 工具链内置 Swift Testing
+- 依赖基线:librime-xcframework 1.16.1-pack.8;Swift 6.3.3 工具链内置 Swift Testing;
+  SwiftXPC 本地包(需含 `wire-fixes-for-rimekit-e2e` 分支的两处线缆修复,见 §7)
 - 运行:`swift test`(macOS);iOS 守护:`swift build --destination <ios.json>`(v2 schema 见文末附录)
 
 ## 0. 参考来源(调研结论)
@@ -34,21 +35,30 @@ Tests/RimeKitTests/
 └── (RimeKitTests.swift / XPCWireTests.swift 为既有单测,未动)
 ```
 
-### 1.1 注入接缝(多实例预留)
+### 1.1 注入接缝与双后端参数化(进程内 / 进程内 XPC)
 
-测试体只面向 `RimeTestEnvironment.bootstrapped()` 给出的环境(根引用 + 数据目录 +
-通知日志),对"根是进程内实例还是远程代理"零感知——对应蓝绿方案"四种形态调用点同构"。
+测试体只面向 `RimeTestEnvironment.bootstrapped(backend:)` 给出的环境(根引用 +
+数据目录 + 通知日志)。**每个功能测试函数以 `@Test(arguments: RimeBackend.allCases)`
+参数化**,同一份断言在两种引用形态下各跑一遍:
 
-- `RimeBackend.inProcess`:直通 `RimeServiceRoot.localShared`。librime 是进程级单例
-  (§0),进程内**不**按套件多实例化根——并行套件若各持根实例,即绕过唯一串行执行域
-  (§3.7),对 librime 形成数据竞争(§2.6)。"多实例"语义由 remote 后端承载:每环境
-  一条连接,每个服务进程内恰一个引擎(§1.3 同构)。
-- `RimeBackend.remote`(阶段 3 预留,注释内含接线草图):XPC resolve 根代理。
-- 后端选择:`RIMEKIT_TEST_BACKEND` 环境变量(缺省 `inProcess`)。工具链 Swift Testing
-  尚无 `@Suite(arguments:)`(6.3.3 探针实证),remote 参数化以 CI 矩阵逐后端跑同一批
-  套件实现;待上游支持参数化套件后可平移为 `@Suite(arguments:)`。
-- 会话等高层门面经 `env.makeSession()`(internal `RimeSession(root:)`)注入根,不用
-  绑死 `localShared` 的公开 `init()`。
+| 后端 | 根引用形态 | 调用路径 |
+|---|---|---|
+| `.inProcess` | 服务端根 actor 的**本地引用** | 编译器直连,不过线缆 |
+| `.inProcessXPC` | 经进程内 XPC 连接对 `resolve(id: .root)` 的**线缆代理** | 每次调用走完整 XPC 线缆(marshal/unmarshal、typed-throws 错误还原、每通道 FIFO) |
+
+**单根不变式(§3.7)**:两个后端指向**同一个**根 actor 实例——它诞生在进程内
+连接对的服务端(`RimeXPCWirePair.make()`,`reserveRootID` + `bind`)。若两后端
+各持一个根实例,并行套件即绕过唯一串行执行域,对 librime 形成数据竞争(§2.6)。
+单根双引用让 `swift test` 单进程内安全地并行跑满两种形态;这也是 §3.4"四种形态
+调用点同构"的首次端到端实证(80 方法全量过线缆)。
+
+- 连接对写法复制自 SwiftXPC `DistributedXPCIntegrationTests.makeConnectionPair`
+  (匿名 listener → accept 回调内建服务端 system → endpoint marshal → client
+  resolve);`reserveRootID`/`bind` 为 internal,经 `@testable import DistributedXPC`
+  访问(SwiftPM debug 构建对依赖开启 testability,已实证)。
+- Swift Testing 工具链无 `@Suite(arguments:)`(探针实证),参数化落在**测试函数级**
+  `@Test(arguments:)`;`RimeTestRuntime`(部署 + 连接对)进程内单次,环境按后端缓存。
+- 既有单元/线缆往返测试(RimeKitTests / XPCWireTests)不参数化,保持原样。
 
 ### 1.2 进程级 bootstrap(每测试进程至多部署一次)
 
@@ -126,6 +136,8 @@ shared/user data dir)。确定性设计:
 
 ## 5. 测试驱动出的产品修复(随本设计落地)
 
+RimeKit(Sources):
+
 | # | 缺陷 | 修复 |
 |---|---|---|
 | P1 | `engineString` 对 `config_get_cstring` 返回的**借用** `const char*` 调用 `deallocate()` → malloc abort(整测试进程崩,ConfigTests 首次实证) | 去除释放,只拷贝(`RimeConfig.swift`) |
@@ -134,15 +146,42 @@ shared/user data dir)。确定性设计:
 | P2 | `engineClose` 不从句柄表移除已关配置 → 句柄表泄漏 + 复用句柄悬垂读取已释放 `rime_config_t` | `removeValue` 后关闭,复用抛 `invalidHandle`(与 D4 纪律一致) |
 | P2 | 候选迭代器 `advance` 强解包句柄表 → 外来/陈旧句柄崩溃(§1.4 D4 残留) | 改抛 `invalidHandle(.candidateIterator)`(`RimeContext.swift`);`end` 保持幂等容忍 |
 
+SwiftXPC(上游 `/Users/ghostflyby/repos/tests/SwiftXPC`,分支 `wire-fixes-for-rimekit-e2e`):
+
+| # | 缺陷 | 修复 |
+|---|---|---|
+| P1 | `parseMethodSuffix` 不处理匿名首参的 `_` 分隔符:`selectSchema(_:for:)` 等解析成 `method()`,与 `@XPCService` 元数据键不匹配 → 白表未命中 → 每次调用 `unknownTarget` | base 名后跳过 `_`;附真实 mangling 回归测试 |
+| P1 | `XPCReplyEnvelope.payload: XPCObject?` 宏解码把 "present-but-null" 折叠成 nil:`Optional.none` 返回值(如 `advance` 迭代穷尽、无 commit)客户端报 `missingPayload(.returnValue)` | 手写 envelope 编解码 + `hasPayload` 标记区分无载荷/空载荷;附往返回归测试 |
+| P2 | 标识符解析无法解码 Swift 词替换压缩(`…3for0E011abbreviated2in…` 中 `0E0`="state")→ `stateLabel` 双重载键不匹配 | `lookupMetadata` 增加 base 名前缀回退(歧义重载族退化为无元数据,与宏的合并规则一致);附单元测试 |
+
 ## 6. remote 参数化路线(阶段 3 接入清单)
 
-1. `RimeBackend.remote` 补实现:launchd 服务(borrow SwiftXPC demo bundle 模式)或
-   进程内 connection pair;`makeRoot` 返回 `RimeServiceRoot.resolve(...)` 代理。
+1. `RimeBackend.remote` 补实现:launchd 服务(borrow SwiftXPC demo bundle 模式);
+   `makeRoot` 返回 `RimeServiceRoot.resolve(...)` 代理。RimeBackend 为
+   `CaseIterable` 枚举,追加 case 即纳入全部 `@Test(arguments:)` 自动双跑/三跑。
 2. `RimeTestEnvironment` 持有连接生命周期,补 `shutdown()`(进程内 no-op);bootstrap
    的健康探活改走 `serviceVersion()`/`healthCheck()`。
-3. CI 矩阵:同一批套件在 `RIMEKIT_TEST_BACKEND=inProcess|remote` 下各跑一遍;
-   工具链支持 `@Suite(arguments:)` 后可改为进程内参数化。
-4. 解锁项:`cleanup*`/`finalize`/部署侧语义测试随隔离环境启用(§4)。
+3. 解锁项:`cleanup*`/`finalize`/部署侧语义测试随隔离环境启用(§4)——它们正是
+   `.disabled` 登记时预留的启用点。
+
+## 7. 实证语义摘录(续):XPC 线缆层
+
+双后端参数化跑通前,线缆层发现并修复/确认的事实(对阶段 3 蓝绿直接有用):
+
+1. **`@XPCService` 元数据键 vs mangled 标识符**:匿名首参在 mangling 中拼作
+   `_` 分隔符(`12selectSchema_3for`),词复用触发压缩(`0E0`="state")——
+   从标识符解析方法键本质上是 demangling 问题,启发式解析必漏。已以上游
+   修复 + base 前缀回退兜底;新增分布式方法后跑双后端测试即可暴露新形状。
+2. **nil Optional 返回值**需要 envelope 携带 `hasPayload` 标记才能与
+   `.returnVoid` 区分(上游已修)。
+3. 单条 XPC 连接上的多路并发调用(libxpc 逐消息应答关联)+ 服务端根 actor
+   串行,在 48 测试 × 2 形态并行压测下无串扰——SwiftXPC FIFO 语义成立。
+4. RimeError typed-throws 错误跨线缆还原端到端成立(`invalidHandle` 家族
+   在 `.inProcessXPC` 下断言原值通过)。
+5. 80 方法全量线缆调用 + 并行套件共享单根,是 V7 编译器缺陷家族的现成
+   探针:本轮调用点签名漂移(`thrown expression type 'any Error' cannot
+   be converted to error type 'RimeError'`,随文件字母序布局非确定性移动)
+   再次复现,规避写法为调用点套 `do throws(any Error)`。
 
 ## 附录:iOS destination 构建守护
 

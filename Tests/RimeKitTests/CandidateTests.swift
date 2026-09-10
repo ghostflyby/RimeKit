@@ -6,19 +6,18 @@ import Testing
 /// 12 条候选 × page_size 5 → 5/5/2 三页,断言全部确定性)。
 /// `RimeSession` 为 `~Copyable`:观察值一律先取出局部值再进断言宏。
 @Suite struct CandidateTests {
-  let env: RimeTestEnvironment
-  init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-
   /// 键入 `mmmm` 并返回会话(12 候选场景的公共前奏)。
   /// 元组不可携带 `~Copyable`,故只返回会话,上下文由调用方自取。
-  private func sessionTypingPagingCode() async throws -> RimeSession {
+  private func sessionTypingPagingCode(_ env: RimeTestEnvironment) async throws -> RimeSession {
     let session = try await env.makeSession()
     _ = try await session.typeKeys("mmmm")
     return session
   }
 
-  @Test func firstPageLayoutAndOrder() async throws {
-    let session = try await sessionTypingPagingCode()
+  @Test(arguments: RimeBackend.allCases)
+  func firstPageLayoutAndOrder(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await sessionTypingPagingCode(env)
     let context = try await session.context
     let menu = try await #require(context?.menu)
     #expect(menu.pageSize == MinimalRimeData.pageSize)
@@ -30,10 +29,12 @@ import Testing
     // (selector 用内建缺省 1234567890),故不对此字段强断言。
   }
 
-  @Test func pagingViaPageKeys() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func pagingViaPageKeys(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     // 1.16.1 的 change_page C API 不移动页(实测恒 false);真实前端(Squirrel)以
     // Page_Down/Page_Up 键翻页(navigator 消费 X11 keysym),测试同型驱动。
-    let session = try await sessionTypingPagingCode()
+    let session = try await sessionTypingPagingCode(env)
 
     let firstStep = try await session.processKey(Key.pageDown, modifierMask: 0)
     #expect(firstStep == true)
@@ -65,8 +66,10 @@ import Testing
     #expect(menu.pageNumber == 1)
   }
 
-  @Test func highlightAPI() async throws {
-    let session = try await sessionTypingPagingCode()
+  @Test(arguments: RimeBackend.allCases)
+  func highlightAPI(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await sessionTypingPagingCode(env)
 
     let highlighted = try await session.highlightCandidate(at: 3)
     var context = try await session.context
@@ -81,8 +84,10 @@ import Testing
     #expect(menu.highlightedCandidateIndex == 1)
   }
 
-  @Test func globalSelectAcrossPages() async throws {
-    let session = try await sessionTypingPagingCode()
+  @Test(arguments: RimeBackend.allCases)
+  func globalSelectAcrossPages(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await sessionTypingPagingCode(env)
     // 全局第 12 候选(末页最后一个),不经翻页直接全局选取。
     let handled = try await session.selectCandidate(at: 11)
     let commitText = try await session.commitText
@@ -90,8 +95,9 @@ import Testing
     #expect(commitText == MinimalRimeData.mmmmCandidates[11])
   }
 
-  @Test(.disabled("delete_candidate 在无用户词典的夹具下返回 true 但不重排候选表(语义依赖 user_dict);待 remote 阶段带用户词典环境再验证"))
-  func removeCandidateReflowsList() async throws {
+  @Test(.disabled("delete_candidate 在无用户词典的夹具下返回 true 但不重排候选表(语义依赖 user_dict);待 remote 阶段带用户词典环境再验证"), arguments: RimeBackend.allCases)
+  func removeCandidateReflowsList(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     _ = try await session.typeKeys("nihao")
 
@@ -107,14 +113,18 @@ import Testing
     #expect(commitText == MinimalRimeData.nihaoCandidates[1])
   }
 
-  @Test func handleIteratorWalksAllCandidates() async throws {
-    let session = try await sessionTypingPagingCode()
+  @Test(arguments: RimeBackend.allCases)
+  func handleIteratorWalksAllCandidates(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await sessionTypingPagingCode(env)
     let texts = try await collectAllCandidates(from: env.root, session: session.sessionID)
     #expect(texts == MinimalRimeData.mmmmCandidates)
   }
 
-  @Test func candidateListFromIndex() async throws {
-    let session = try await sessionTypingPagingCode()
+  @Test(arguments: RimeBackend.allCases)
+  func candidateListFromIndex(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await sessionTypingPagingCode(env)
     let iterator = try await env.root.candidateList(fromIndex: 10, for: session.sessionID)
     let unwrapped = try await #require(iterator)
     var texts: [String] = []
@@ -125,7 +135,9 @@ import Testing
     #expect(texts == Array(MinimalRimeData.mmmmCandidates.suffix(2)))
   }
 
-  @Test func advanceForeignCandidateIteratorThrows() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func advanceForeignCandidateIteratorThrows(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     // D4 纪律:外来/陈旧句柄抛 invalidHandle,而非强解包崩溃。
     let foreign = ObjectHandle<RimeCandidate>()
     await #expect(

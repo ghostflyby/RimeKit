@@ -2,6 +2,10 @@ import Foundation
 import Synchronization
 import RimeDynamic
 
+#if os(macOS)
+import DistributedXPC
+#endif
+
 @testable import RimeKit
 
 // MARK: - 通知日志
@@ -72,59 +76,53 @@ final class RimeNotificationLog: Sendable {
   }
 }
 
-// MARK: - 已部署测试环境
+// MARK: - 进程级运行时(唯一根 + 部署产物)
 
-/// 进程级共享的已部署环境:根 actor 引用 + 夹具数据目录 + 通知日志。
+/// 进程级共享运行时:唯一的根 actor(进程内 XPC 连接对的服务端根)+ 已部署的
+/// 夹具数据 + 通知流水。全部后端的调用都收敛到这一个执行域(§3.7)。
 ///
 /// librime 是进程级单例,setup/initialize/deploy 每测试进程至多执行一次
 /// (对应 librime gtest 的 `rime_test_main.cc` Environment;Squirrel 的
-/// `setupRime` + `startRime` 流程)。各套件经 `bootstrapped()` 共享同一环境,
-/// 并发套件的全部引擎调用天然串行于唯一根 actor(§3.7)。
-///
-/// 各测试套件的接法(未来 remote 化时保持不变):
-///
-///     @Suite struct TypingTests {
-///       let env: RimeTestEnvironment
-///       init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-///       @Test func …() async throws { let s = try await env.makeSession() … }
-///     }
-final class RimeTestEnvironment: Sendable {
-  /// 选择的后端名(诊断用)。
-  let backendName: String
+/// `setupRime` + `startRime` 流程)。
+final class RimeTestRuntime: Sendable {
   /// 夹具数据目录(同时是 traits 的 shared/user data dir;生命周期测试断言目录回读)。
   let userDirectory: URL
-  /// 引擎根引用:进程内即 `localShared`,remote 化后为连接的根代理。
-  let root: RimeServiceRoot
   /// 自 bootstrap 注册起的全局通知流水(部署/选项/方案切换断言的数据源)。
   let notifications: RimeNotificationLog
+  /// 唯一根 actor 实例:诞生于连接对服务端,`inProcess` 后端持其本地引用。
+  let root: RimeServiceRoot
+  #if os(macOS)
+  /// 进程内连接对(`inProcessXPC` 后端的线缆通道);持有全部连接的生命周期。
+  let wirePair: RimeXPCWirePair?
+  #endif
 
   private init(
-    backendName: String, userDirectory: URL, root: RimeServiceRoot,
-    notifications: RimeNotificationLog
+    userDirectory: URL, notifications: RimeNotificationLog, root: RimeServiceRoot
   ) {
-    self.backendName = backendName
     self.userDirectory = userDirectory
-    self.root = root
     self.notifications = notifications
+    self.root = root
+    #if os(macOS)
+    self.wirePair = nil
+    #endif
   }
 
-  /// 新建输入会话(门面;deinit 异步销毁,不参与时序敏感断言,§1.4 D5)。
-  func makeSession() async throws -> RimeSession {
-    try await RimeSession(root: root)
+  #if os(macOS)
+  private init(
+    userDirectory: URL, notifications: RimeNotificationLog, root: RimeServiceRoot,
+    wirePair: RimeXPCWirePair
+  ) {
+    self.userDirectory = userDirectory
+    self.notifications = notifications
+    self.root = root
+    self.wirePair = wirePair
   }
-
-  // MARK: bootstrap(进程内单次)
-
-  private static let bootstrap = RimeBootstrap()
-
-  static func bootstrapped() async throws -> RimeTestEnvironment {
-    try await bootstrap.environment(backend: .current)
-  }
+  #endif
 
   /// 部署一次:Squirrel 形态的初始化序列(setup → 通知回调 → initialize →
   /// start_maintenance(fullCheck) → join),随后探活方案就绪。
   /// `joinMaintenanceThread` 阻塞执行域秒级——§3.8 I4 只约束服务路径,测试进程可接受。
-  fileprivate static func deploy(backend: RimeBackend) async throws -> RimeTestEnvironment {
+  fileprivate static func deploy() async throws -> RimeTestRuntime {
     let baseDirectory = FileManager.default.temporaryDirectory
       .appendingPathComponent("rimekit-tests-\(UUID().uuidString)", isDirectory: true)
     let userDirectory = baseDirectory.appendingPathComponent("user", isDirectory: true)
@@ -134,11 +132,15 @@ final class RimeTestEnvironment: Sendable {
     try MinimalRimeData.write(into: userDirectory)
     // 夹具目录留在系统临时目录便于失败取证(librime 日志在 log/ 下),由系统清理。
 
-    let root = try await backend.makeRoot()
+    // 根 actor 诞生于进程内 XPC 连接对的服务端(单一执行域,双后端共享;
+    // 写法复制自 SwiftXPC DistributedXPCIntegrationTests.makeConnectionPair)。
+    #if os(macOS)
+    let wirePair = try RimeXPCWirePair.make()
+    let root = wirePair.servedRoot
+    #else
+    let root = RimeServiceRoot(actorSystem: RimeLocalSystem())
+    #endif
     let notifications = RimeNotificationLog.installCollector()
-    let environment = RimeTestEnvironment(
-      backendName: backend.name, userDirectory: userDirectory, root: root,
-      notifications: notifications)
 
     var traits = RimeTraits(
       sharedDataDir: userDirectory.path,
@@ -186,23 +188,99 @@ final class RimeTestEnvironment: Sendable {
     }
     _ = try await root.destroySession(with: probe)
 
-    return environment
+    #if os(macOS)
+    return RimeTestRuntime(
+      userDirectory: userDirectory, notifications: notifications, root: root,
+      wirePair: wirePair)
+    #else
+    return RimeTestRuntime(
+      userDirectory: userDirectory, notifications: notifications, root: root)
+    #endif
   }
 }
 
-/// bootstrap 备忘:并发套件共享同一次部署;失败后允许下次调用重试。
+// MARK: - 已部署测试环境(按后端取用)
+
+/// 单个后端的测试环境:被测根引用(`runtime.root` 的本地引用,或经连接对
+/// `resolve(id: .root)` 的线缆代理)+ 共享的部署产物。
+///
+/// 各测试套件的接法(函数级参数化;工具链 Swift Testing 暂无 `@Suite(arguments:)`):
+///
+///     @Suite struct TypingTests {
+///       @Test(arguments: RimeBackend.allCases)
+///       func typedKeys…(backend: RimeBackend) async throws {
+///         let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+///         …
+///       }
+///     }
+final class RimeTestEnvironment: Sendable {
+  /// 本环境对应的引用形态。
+  let backend: RimeBackend
+  /// 被测根引用:`.inProcess` = 服务端根的本地引用;`.inProcessXPC` = 线缆代理。
+  let root: RimeServiceRoot
+  fileprivate let runtime: RimeTestRuntime
+
+  var userDirectory: URL { runtime.userDirectory }
+  var notifications: RimeNotificationLog { runtime.notifications }
+
+  fileprivate init(backend: RimeBackend, runtime: RimeTestRuntime, root: RimeServiceRoot) {
+    self.backend = backend
+    self.runtime = runtime
+    self.root = root
+  }
+
+  /// 新建输入会话(门面;deinit 异步销毁,不参与时序敏感断言,§1.4 D5)。
+  func makeSession() async throws -> RimeSession {
+    try await RimeSession(root: root)
+  }
+
+  // MARK: bootstrap(运行时单次部署 + 按后端缓存环境)
+
+  private static let bootstrap = RimeBootstrap()
+
+  static func bootstrapped(backend: RimeBackend) async throws -> RimeTestEnvironment {
+    try await bootstrap.environment(backend: backend)
+  }
+}
+
+/// bootstrap 备忘:运行时(部署 + 连接对)进程内单次;环境按后端缓存。
+/// 失败后允许下次调用重试。
 private actor RimeBootstrap {
-  private var task: Task<RimeTestEnvironment, any Error>?
+  private var runtimeTask: Task<RimeTestRuntime, any Error>?
+  private var environments: [RimeBackend: RimeTestEnvironment] = [:]
 
   func environment(backend: RimeBackend) async throws -> RimeTestEnvironment {
-    if let task { return try await task.value }
-    let deployed = Task { try await RimeTestEnvironment.deploy(backend: backend) }
-    task = deployed
-    do {
-      return try await deployed.value
-    } catch {
-      task = nil
-      throw error
+    if let cached = environments[backend] { return cached }
+
+    let runtime: RimeTestRuntime
+    if let runtimeTask {
+      runtime = try await runtimeTask.value
+    } else {
+      let deployed = Task { try await RimeTestRuntime.deploy() }
+      runtimeTask = deployed
+      do {
+        runtime = try await deployed.value
+      } catch {
+        runtimeTask = nil
+        throw error
+      }
     }
+
+    let root: RimeServiceRoot
+    switch backend {
+    case .inProcess:
+      root = runtime.root
+    #if os(macOS)
+    case .inProcessXPC:
+      guard let pair = runtime.wirePair else {
+        throw RimeTestFailure(stage: "backend", detail: "运行时缺少进程内 XPC 连接对")
+      }
+      root = try pair.resolveProxy()
+    #endif
+    }
+
+    let environment = RimeTestEnvironment(backend: backend, runtime: runtime, root: root)
+    environments[backend] = environment
+    return environment
   }
 }

@@ -5,10 +5,9 @@ import Testing
 /// 全局通知(Squirrel `notificationHandler` 消费的四类消息中的三类:
 /// deploy 进度、option 状态、schema 切换;property 通知需保留属性约定,暂不覆盖)。
 @Suite struct NotificationTests {
-  let env: RimeTestEnvironment
-  init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-
-  @Test func bootstrapDeployReportedSuccess() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func bootstrapDeployReportedSuccess(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let values = env.notifications.deployValues
     #expect(values.contains("success"))
     #expect(values.contains("failure") == false)
@@ -16,7 +15,9 @@ import Testing
     #expect(values.first == "start")
   }
 
-  @Test func optionNotificationCarriesSessionAndValue() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func optionNotificationCarriesSessionAndValue(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let sessionID = session.sessionID
     let log = env.notifications
@@ -34,7 +35,9 @@ import Testing
     #expect(turnedOff)
   }
 
-  @Test func schemaNotificationOnSwitch() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func schemaNotificationOnSwitch(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let sessionID = session.sessionID
     let log = env.notifications

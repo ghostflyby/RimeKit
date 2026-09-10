@@ -9,10 +9,9 @@ import Testing
 /// autoclosure 捕获——所有观察值先取出为局部值,再进入断言宏。
 @Suite(.serialized)
 struct SessionLifecycleTests {
-  let env: RimeTestEnvironment
-  init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-
-  @Test func createSessionYieldsValidID() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func createSessionYieldsValidID(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let sessionID = try await env.root.createSession()
     #expect(sessionID.rawValue != 0)
     let found = try await env.root.findSession(with: sessionID)
@@ -20,13 +19,17 @@ struct SessionLifecycleTests {
     _ = try await env.root.destroySession(with: sessionID)
   }
 
-  @Test func unknownSessionIsNotFindable() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func unknownSessionIsNotFindable(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let ghost = RimeSessionID(rawValue: 0xDEAD_BEEF)
     let found = try await env.root.findSession(with: ghost)
     #expect(found == false)
   }
 
-  @Test func destroySessionRemovesItFromTable() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func destroySessionRemovesItFromTable(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let sessionID = try await env.root.createSession()
     let destroyed = try await env.root.destroySession(with: sessionID)
     #expect(destroyed == true)
@@ -37,7 +40,9 @@ struct SessionLifecycleTests {
     #expect(destroyedAgain == false)
   }
 
-  @Test func sessionsAreIndependent() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func sessionsAreIndependent(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let first = try await env.makeSession()
     let second = try await env.makeSession()
     let firstID = first.sessionID
@@ -56,7 +61,9 @@ struct SessionLifecycleTests {
     #expect(secondComposing == false)
   }
 
-  @Test func facadeBindsExistingSession() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func facadeBindsExistingSession(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let schemaID = try await session.status?.schemaID
     let input = try await session.input
@@ -64,7 +71,9 @@ struct SessionLifecycleTests {
     #expect(input?.isEmpty != false)
   }
 
-  @Test func facadeRejectsUnknownSessionID() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func facadeRejectsUnknownSessionID(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let ghost = RimeSessionID(rawValue: 0xDEAD_BEEF)
     let restored = try await RimeSession(root: env.root, sessionID: ghost)
     if restored != nil {
@@ -72,16 +81,18 @@ struct SessionLifecycleTests {
     }
   }
 
-  @Test(.disabled("cleanup 是进程级破坏性操作,会连带销毁并行套件的活跃会话;待 remote 后端(每后端独立服务进程)经参数化启用"))
-  func cleanupAllSessionsEmptiesTable() async throws {
+  @Test(.disabled("cleanup 是进程级破坏性操作,会连带销毁并行套件的活跃会话;待 remote 后端(每后端独立服务进程)经参数化启用"), arguments: RimeBackend.allCases)
+  func cleanupAllSessionsEmptiesTable(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let sessionID = try await env.root.createSession()
     try await env.root.cleanupAllSessions()
     let found = try await env.root.findSession(with: sessionID)
     #expect(found == false)
   }
 
-  @Test(.disabled("同上:stale 清理对 C API 创建的会话同样是进程级全量删除"))
-  func cleanupStaleSessionsDropsUnreferencedSessions() async throws {
+  @Test(.disabled("同上:stale 清理对 C API 创建的会话同样是进程级全量删除"), arguments: RimeBackend.allCases)
+  func cleanupStaleSessionsDropsUnreferencedSessions(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let sessionID = try await env.root.createSession()
     try await env.root.cleanupStaleSessions()
     let found = try await env.root.findSession(with: sessionID)

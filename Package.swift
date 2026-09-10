@@ -46,6 +46,9 @@ let package = Package(
         // 测试基建直挂 librime C API 注册全局通知回调(Squirrel setupRime 同型;
         // 根 actor 的非 distributed 成员不可经远程引用触达,通知收集走进程级 C 钩子)。
         .product(name: "RimeDynamic", package: "librime-xcframework"),
+        // 进程内 XPC 连接对(SwiftXPC IntegrationConnectionPair 范式);
+        // 经 @testable 访问 reserveRootID/bind(SwiftPM debug 构建对依赖开 testability)。
+        .product(name: "SwiftXPC", package: "SwiftXPC"),
         .product(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS])),

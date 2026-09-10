@@ -5,10 +5,9 @@ import Testing
 /// 配置面(参考:librime `config_test.cc` 的读写/遍历语义,经 C API 层展开;
 /// 句柄纪律:外来/陈旧句柄抛 `invalidHandle` 而非崩溃)。
 @Suite struct ConfigTests {
-  let env: RimeTestEnvironment
-  init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-
-  @Test func openSchemaReadsCompiledConfig() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func openSchemaReadsCompiledConfig(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let config = try await #require(env.root.openSchema(MinimalRimeData.primarySchemaID))
     #expect(try await env.root.string(forKey: "schema/name", in: config) == MinimalRimeData.primarySchemaName)
     #expect(try await env.root.string(forKey: "schema/schema_id", in: config) == MinimalRimeData.primarySchemaID)
@@ -19,7 +18,9 @@ import Testing
     #expect(try await env.root.close(config: config) == true)
   }
 
-  @Test func openUnknownSchemaYieldsEmptyConfig() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func openUnknownSchemaYieldsEmptyConfig(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     // librime 语义:未知方案/配置打开"成功"但得到空配置(可写形态),读任何键得 nil。
     let config = try await #require(env.root.openSchema("rimekit_nonexistent"))
     let schemaID = try await env.root.string(forKey: "schema/schema_id", in: config)
@@ -27,7 +28,9 @@ import Testing
     #expect(try await env.root.close(config: config) == true)
   }
 
-  @Test func openDefaultConfigListsSchemas() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func openDefaultConfigListsSchemas(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let config = try await #require(env.root.openConfig("default"))
     #expect(try await env.root.listSize(forKey: "schema_list", in: config) == 2)
     // librime 配置键语法:列表索引用 `@n`(同 custom patch 约定)。
@@ -36,7 +39,9 @@ import Testing
     #expect(try await env.root.close(config: config) == true)
   }
 
-  @Test func openUnknownConfigYieldsEmptyConfig() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func openUnknownConfigYieldsEmptyConfig(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     // 同上:未知 config 打开为空配置(可写形态)。
     let config = try await #require(env.root.openConfig("nonexistent_config"))
     let any = try await env.root.string(forKey: "any", in: config)
@@ -45,7 +50,9 @@ import Testing
   }
 
   /// makeConfig + 内联 YAML:全类型读/写/删/嵌套/遍历(librime config_test 的 C API 等价物)。
-  @Test func inMemoryConfigRoundTrip() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func inMemoryConfigRoundTrip(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let config = try await env.root.makeConfig()
     #expect(
       try await env.root.load(
@@ -111,7 +118,9 @@ import Testing
     #expect(try await env.root.close(config: config) == true)
   }
 
-  @Test func mapAndListIterators() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func mapAndListIterators(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let config = try await env.root.makeConfig()
     #expect(
       try await env.root.load(
@@ -136,7 +145,9 @@ import Testing
     #expect(try await env.root.close(config: config) == true)
   }
 
-  @Test func foreignConfigHandleThrowsInsteadOfCrashing() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func foreignConfigHandleThrowsInsteadOfCrashing(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let foreign = ObjectHandle<RimeConfig>()
     await #expect(throws: RimeError.invalidHandle(kind: .config, id: foreign.id)) {
       try await env.root.string(forKey: "k", in: foreign)
@@ -146,7 +157,9 @@ import Testing
     }
   }
 
-  @Test func foreignConfigIteratorHandleThrows() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func foreignConfigIteratorHandleThrows(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let foreign = ObjectHandle<RimeConfigIterator>()
     await #expect(throws: RimeError.invalidHandle(kind: .configIterator, id: foreign.id)) {
       try await env.root.advanceConfigIterator(foreign)
@@ -155,7 +168,9 @@ import Testing
     try await env.root.endConfigIterator(foreign)
   }
 
-  @Test func closedConfigHandleThrowsOnReuse() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func closedConfigHandleThrowsOnReuse(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let config = try await #require(env.root.openConfig("default"))
     #expect(try await env.root.close(config: config) == true)
     // 关闭即失效:同一句柄再读抛 invalidHandle(而非悬垂读取)。

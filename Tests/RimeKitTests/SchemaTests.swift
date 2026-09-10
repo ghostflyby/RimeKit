@@ -6,10 +6,9 @@ import Testing
 /// `select_schema`/`get_state_label(_abbreviated)` 驱动菜单与状态弹窗)。
 /// `RimeSession` 为 `~Copyable`:观察值一律先取出局部值再进断言宏。
 @Suite struct SchemaTests {
-  let env: RimeTestEnvironment
-  init() async throws { env = try await RimeTestEnvironment.bootstrapped() }
-
-  @Test func schemaListMatchesFixture() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func schemaListMatchesFixture(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let items = try await session.schemas
     #expect(
@@ -18,7 +17,9 @@ import Testing
       items.map(\.name) == [MinimalRimeData.primarySchemaName, MinimalRimeData.altSchemaName])
   }
 
-  @Test func newSessionStartsWithDefaultSchema() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func newSessionStartsWithDefaultSchema(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let sessionID = session.sessionID
     let currentSchema = try await env.root.currentSchema(for: sessionID)
@@ -28,7 +29,9 @@ import Testing
     #expect(status?.schemaName == MinimalRimeData.primarySchemaName)
   }
 
-  @Test func selectAltSchemaAndBack() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func selectAltSchemaAndBack(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let sessionID = session.sessionID
 
@@ -52,7 +55,9 @@ import Testing
     #expect(currentSchema == MinimalRimeData.primarySchemaID)
   }
 
-  @Test func selectSchemaBoolDoesNotValidateSchemaID() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func selectSchemaBoolDoesNotValidateSchemaID(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     // librime 1.16.1 rime_api_impl.h(DEPRECATED 路径):select_schema 只要会话存在
     // 即返回 true,不校验方案是否存在——Bool 不是有效性信号。
     // 已知方案的端到端切换语义由 selectAltSchemaAndBack 覆盖。
@@ -61,7 +66,9 @@ import Testing
     #expect(handled == true)
   }
 
-  @Test func stateLabelsFromSwitches() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func stateLabelsFromSwitches(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let asciiOff = try await session.stateLabel(for: "ascii_mode", state: .off)
     let asciiOn = try await session.stateLabel(for: "ascii_mode", state: .on)
@@ -76,7 +83,9 @@ import Testing
     #expect(unknown == nil)
   }
 
-  @Test func abbreviatedStateLabelsAvailable() async throws {
+  @Test(arguments: RimeBackend.allCases)
+  func abbreviatedStateLabelsAvailable(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let label = try await session.stateLabel(for: "ascii_mode", state: .on, abbreviated: true)
     #expect(label?.isEmpty == false)
