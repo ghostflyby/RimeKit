@@ -1,10 +1,12 @@
+import Synchronization
 import Testing
 
 @testable import RimeKit
 
 /// 全局通知(Squirrel `notificationHandler` 消费的四类消息中的三类:
 /// deploy 进度、option 状态、schema 切换;property 通知需保留属性约定,暂不覆盖)。
-@Suite struct NotificationTests {
+@Suite(.serialized)
+struct NotificationTests {
   @Test(arguments: RimeBackend.allCases)
   func bootstrapDeployReportedSuccess(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
@@ -57,5 +59,36 @@ import Testing
         && $0.value.hasPrefix("\(MinimalRimeData.primarySchemaID)/")
     }
     #expect(primaryNotified)
+  }
+
+  /// 闭包订阅(`RimeNotificationSubscription`)的回流与退订。
+  @Test(arguments: RimeBackend.allCases)
+  func subscriptionReceivesAndStopsAfterDetach(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    let sessionID = session.sessionID
+
+    let received = RimeNotificationLog()
+    let subscription = RimeNotificationSubscription { _, type, value in
+      received.append(session: sessionID, type: type, value: value)
+    }
+    try await subscription.attach(to: env.root)
+
+    try await session.setOption("ascii_mode", value: true)
+    let turnedOn = await received.waitFor {
+      $0.session == sessionID && $0.type == .option && $0.value == "ascii_mode"
+    }
+    #expect(turnedOn)
+
+    // 退订后不再接收(留出竞态窗口再验证)。
+    try await subscription.detach(from: env.root)
+    let marker = received.snapshot.count
+    try await session.setOption("ascii_mode", value: false)
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(received.snapshot.count == marker)
+
+    // macOS 路径的 detach 会清进程级 handler(全局单槽),即时恢复环境收集器,
+    // 否则并行套件的通知断言(以及本套件后续用例)失去数据源。
+    env.reinstallNotificationCollector()
   }
 }

@@ -25,9 +25,7 @@ public distributed actor RimeServiceRoot {
   public typealias ActorSystem = RimeLocalSystem
   #endif
 
-  #if os(macOS)
   private var notificationSink: RimeNotificationSink?
-  #endif
 
   /// 串行化不变式(§3.7):每进程恰有一个本地共享实例;
   /// XPC 服务进程由 shouldAccept 单 peer 策略保证。
@@ -61,8 +59,10 @@ public distributed actor RimeServiceRoot {
     true
   }
 
-  #if os(macOS)
-  public distributed func setNotificationSink(_ sink: RimeNotificationSink?) async throws(RimeError)
+  /// 订阅通知(内部实现,经 `RimeNotificationSubscription` 间接使用)。
+  /// **声明不得包 `#if`**:否则 `@XPCService` 宏枚举不到,元数据白表缺失,
+  /// 线缆调用即 unknownTarget(实证)。
+  distributed func setNotificationSink(_ sink: RimeNotificationSink?) async throws(RimeError)
   {
     notificationSink = sink
     if let sink {
@@ -73,7 +73,6 @@ public distributed actor RimeServiceRoot {
       engineNotificationHandler = nil
     }
   }
-  #endif
 
   // MARK: 生命周期
 

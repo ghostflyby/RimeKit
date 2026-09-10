@@ -203,9 +203,11 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 
 `swift build --destination ios.json` → 整包(含 RimeKitRimeService)构建回绿。
 
-## 8. 调查:`setNotificationSink` 泛化为闭包输入 API 的可行性
+## 8. 调查与落地:`setNotificationSink` 泛化为闭包输入 API(`RimeNotificationSubscription`)
 
-**结论:能做到,关键路径已双平台编译 + 运行时实证**(2026-09-10,探针后已回滚源码,留作实现蓝图)。
+**结论:已落地**(2026-09-10)。公开面收敛为 `RimeNotificationSubscription`(闭包输入,
+`attach(to:)`/`detach(from:)`);`RimeNotificationSink` 与 `setNotificationSink` 均为
+**internal 实现细节**(负向编译探针实证外部不可见)。
 
 ### 8.1 一条硬约束决定 API 形态
 
@@ -228,3 +230,20 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 2. `RimeServiceRoot.setNotificationSink` 去 `#if`(iOS 分支 sink 生命周期由订阅持有,根不 retain);
 3. 新增客户端订阅类型 + `RimeLocalWire` 一致性;macOS attach = 自建 system + sink + 过线订阅,iOS attach = 直接 C 注册;
 4. 测试:双后端 sink 回流(探针 B 已验证)、iOS destination 编译守护(探针 A 已验证)。
+
+## 9. 落地补充(2026-09-10,通知订阅实现)
+
+- **`RimeNotificationSink` 保持 macOS-only + internal**:iOS 走直接 C 注册后,
+  sink 在 iOS 无消费者,平台中立化不再必要(探针 A 的中立化蓝图随之作废);
+  `setNotificationSink` 保持 `#if os(macOS)` + internal。
+- **`@XPCService` 宏枚举不到 `#if` 包裹的成员**(宏在 `#if` 求值前的语法树上
+  扫描直接成员,实证:`setNotificationSink` 曾长期缺席元数据白表,线缆调用
+  一律 unknownTarget)。涉及平台条件化声明的分布式方法,声明体不得包 `#if`。
+- **订阅 detach(macOS 路径 `setNotificationSink(nil)`)会清进程级 C 钩子**
+  (全局单槽),测试套件据此在 detach 后即时重装环境收集器,并把
+  NotificationTests 设为 `.serialized`。
+- **新建会话继承进程级"最后选择的方案"**(实证:并行套件切方案时,新会话可能
+  以非默认方案起步)——"新会话默认方案"类断言须先显式归位再断言。
+- `RimeGlobalNotificationHook`(iOS 直接 C 注册)用 `NSLock` 而非 `Mutex`:
+  `Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建守护实证)。
+- 退役通知 Box 保留强引用至进程结束,避免在途回调悬垂;安装次数有界,开销可忽略。

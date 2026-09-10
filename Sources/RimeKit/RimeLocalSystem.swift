@@ -142,3 +142,4 @@ extension RimeSchemaListItem: RimeLocalWire {}
 extension RimeSchemaList: RimeLocalWire {}
 extension RimeConfigLocation: RimeLocalWire {}
 extension RimeTraits: RimeLocalWire {}
+extension RimeNotificationSink: RimeLocalWire {}

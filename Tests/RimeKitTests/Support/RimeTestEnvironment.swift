@@ -46,6 +46,11 @@ final class RimeNotificationLog: Sendable {
     return entries.withLock({ $0.contains(where: match) })
   }
 
+  /// 重新直挂 C API,把后续通知追加进本日志(供测试在钩子被清后恢复)。
+  func reinstall() {
+    RimeNotificationLog.install0(log: self)
+  }
+
   /// 直挂 librime C API 的全局通知回调并返回收集器。
   ///
   /// 根 actor 的 `engineSetNotificationHandler` 非 distributed 成员,不可经
@@ -54,12 +59,17 @@ final class RimeNotificationLog: Sendable {
   /// 且必须先于 `initialize` 调用。C thunk 在 librime 自己的线程上同步执行,
   /// 严禁同步重入引擎(§3.7 规则 b),此处只做无锁追加。
   static func installCollector() -> RimeNotificationLog {
+    let log = RimeNotificationLog()
+    install0(log: log)
+    return log
+  }
+
+  fileprivate static func install0(log: RimeNotificationLog) {
     final class Box {
       let log: RimeNotificationLog
       init(_ log: RimeNotificationLog) { self.log = log }
     }
 
-    let log = RimeNotificationLog()
     let box = Box(log)
     // 进程生命周期内存活(与 librime 回调注册同寿),有意不释放。
     let context = Unmanaged.passRetained(box).toOpaque()
@@ -72,7 +82,6 @@ final class RimeNotificationLog: Sendable {
           type: RimeNotificationType(from: String(cString: type)),
           value: String(cString: value))
       }, context)
-    return log
   }
 }
 
@@ -232,6 +241,13 @@ final class RimeTestEnvironment: Sendable {
   /// 新建输入会话(门面;deinit 异步销毁,不参与时序敏感断言,§1.4 D5)。
   func makeSession() async throws -> RimeSession {
     try await RimeSession(root: root)
+  }
+
+  /// 重新把全局 C 钩子指向本环境的通知日志。
+  /// 订阅测试 `detach` 会清掉进程级 handler(macOS 路径 `setNotificationSink(nil)`),
+  /// 并行套件的通知断言依赖本收集器,须即时恢复。
+  func reinstallNotificationCollector() {
+    notifications.reinstall()
   }
 
   // MARK: bootstrap(运行时单次部署 + 按后端缓存环境)
