@@ -54,7 +54,7 @@ public distributed actor RimeServiceRoot {
   // MARK: 运维面(不进 `Rime` 协议)
 
   public distributed func serviceVersion() async throws(RimeError) -> String {
-    "rimekit/" + (try engineVersion)
+    "rimekit/" + (try await version())
   }
 
   public distributed func healthCheck() async throws(RimeError) -> Bool {
@@ -78,57 +78,66 @@ public distributed actor RimeServiceRoot {
   // MARK: 生命周期
 
   public distributed func setup(with traits: RimeTraits) async throws(RimeError) {
-    try engineSetup(with: traits)
+    var t = rime_traits_t.rimeStructInit()
+    let handle = traits.toCStructure(&t)
+    rimeApi.setup(&t)
+    withExtendedLifetime(handle) {}
   }
 
   public distributed func initialize(with traits: RimeTraits) async throws(RimeError) {
-    try engineInitialize(with: traits)
+    var t = rime_traits_t.rimeStructInit()
+    let handle = traits.toCStructure(&t)
+    rimeApi.initialize(&t)
+    withExtendedLifetime(handle) {}
   }
 
   public distributed func finalize() async throws(RimeError) {
-    try engineFinalize()
+    rimeApi.finalize()
   }
 
   // MARK: 维护
 
   public distributed func startMaintenance(fullCheck: Bool) async throws(RimeError) -> Bool {
-    try engineStartMaintenance(fullCheck: fullCheck)
+    rimeApi.start_maintenance(fullCheck)
   }
 
   public distributed func isMaintenanceMode() async throws(RimeError) -> Bool {
-    try engineIsMaintenanceMode
+      rimeApi.is_maintenance_mode()
   }
 
   public distributed func joinMaintenanceThread() async throws(RimeError) {
-    try engineJoinMaintenanceThread()
+    rimeApi.join_maintenance_thread()
   }
 
   // MARK: Deployer
 
   public distributed func initializeDeployer(with traits: RimeTraits) async throws(RimeError) {
-    try engineInitializeDeployer(with: traits)
+    var t = rime_traits_t.rimeStructInit()
+    let handle = traits.toCStructure(&t)
+    rimeApi.deployer_initialize(&t)
+    withExtendedLifetime(handle) {}
   }
 
   public distributed func prebuild() async throws(RimeError) -> Bool {
-    try enginePrebuild()
+    rimeApi.prebuild()
   }
 
   public distributed func deploy() async throws(RimeError) -> Bool {
-    try engineDeploy()
+    rimeApi.deploy()
   }
 
   public distributed func deploySchema(withID schemaID: String) async throws(RimeError) -> Bool {
-    try engineDeploySchema(withID: schemaID)
+    rimeApi.deploy_schema(schemaID)
   }
 
   public distributed func deployConfig(filename: String, versionKey: String) async throws(RimeError)
     -> Bool
   {
-    try engineDeployConfig(filename: filename, versionKey: versionKey)
+    rimeApi.deploy_config_file(filename, versionKey)
   }
 
   public distributed func syncUserData() async throws(RimeError) -> Bool {
-    try engineSyncUserData()
+    rimeApi.sync_user_data()
   }
 
   // MARK: 会话
@@ -199,25 +208,39 @@ public distributed actor RimeServiceRoot {
   public distributed func option(named option: String, for sessionID: RimeSessionID)
     async throws(RimeError) -> Bool
   {
-    try engineOption(named: option, for: sessionID)
+    rimeApi.get_option(sessionID.rawValue, option)
   }
 
   public distributed func setOption(_ option: String, value: Bool, for sessionID: RimeSessionID)
     async throws(RimeError)
   {
-    try engineSetOption(option, value: value, for: sessionID)
+    rimeApi.set_option(sessionID.rawValue, option, value)
   }
 
   public distributed func property(named property: String, for sessionID: RimeSessionID)
     async throws(RimeError) -> String?
   {
-    try engineProperty(named: property, for: sessionID)
+    let bufferSize = 1024
+    let buffer: [CChar] = Array(repeating: 0, count: bufferSize)
+    return buffer.withUnsafeBufferPointer { pointer in
+      guard
+        rimeApi.get_property(
+          sessionID.rawValue,
+          property,
+          UnsafeMutablePointer(mutating: pointer.baseAddress),
+          bufferSize
+        )
+      else {
+        return nil
+      }
+      return pointer.baseAddress.map { String(cString: $0) }
+    }
   }
 
   public distributed func setProperty(
     _ property: String, value: String, for sessionID: RimeSessionID
   ) async throws(RimeError) {
-    try engineSetProperty(property, value: value, for: sessionID)
+    rimeApi.set_property(sessionID.rawValue, property, value)
   }
 
   // MARK: Schema
@@ -385,11 +408,15 @@ public distributed actor RimeServiceRoot {
   // MARK: 身份 / 目录
 
   public distributed func userID() async throws(RimeError) -> String {
-    try engineUserID
+      guard let userID = rimeApi.get_user_id() else {
+        throw RimeError.engineNotInitialized
+      }
+      return String(cString: userID)
   }
 
   public distributed func userDataSyncDirectory() async throws(RimeError) -> String {
-    try engineUserDataSyncDirectory
+      rimeApi.get_user_data_sync_dir(cStringBuffer, Self.cStringBufferSize)
+      return String(cString: cStringBuffer)
   }
 
   // MARK: 输入 / 光标
@@ -418,7 +445,10 @@ public distributed actor RimeServiceRoot {
   // MARK: 版本
 
   public distributed func version() async throws(RimeError) -> String {
-    try engineVersion
+      guard let version = rimeApi.get_version() else {
+        throw RimeError.apiUnavailable("get_version")
+      }
+      return String(cString: version)
   }
 
   // MARK: 候选(页式)
@@ -516,23 +546,28 @@ public distributed actor RimeServiceRoot {
   // MARK: 目录
 
   public distributed func sharedDataDirectory() async throws(RimeError) -> String {
-    try engineSharedDataDirectory
+      rimeApi.get_shared_data_dir_s(cStringBuffer, Self.cStringBufferSize)
+      return String(cString: cStringBuffer)
   }
 
   public distributed func userDataDirectory() async throws(RimeError) -> String {
-    try engineUserDataDirectory
+      rimeApi.get_user_data_dir_s(cStringBuffer, Self.cStringBufferSize)
+      return String(cString: cStringBuffer)
   }
 
   public distributed func prebuiltDataDirectory() async throws(RimeError) -> String {
-    try enginePrebuiltDataDirectory
+      rimeApi.get_prebuilt_data_dir_s(cStringBuffer, Self.cStringBufferSize)
+      return String(cString: cStringBuffer)
   }
 
   public distributed func stagingDirectory() async throws(RimeError) -> String {
-    try engineStagingDirectory
+      rimeApi.get_staging_dir_s(cStringBuffer, Self.cStringBufferSize)
+      return String(cString: cStringBuffer)
   }
 
   public distributed func syncDirectory() async throws(RimeError) -> String {
-    try engineSyncDirectory
+      rimeApi.get_sync_dir_s(cStringBuffer, Self.cStringBufferSize)
+      return String(cString: cStringBuffer)
   }
 }
 
