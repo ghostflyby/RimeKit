@@ -25,8 +25,9 @@ import Testing
     #expect(try await env.root.userDataDirectory() == userDirectory)
     // 夹具自包含:sharedDataDir 也指向夹具目录。
     #expect(try await env.root.sharedDataDirectory() == userDirectory)
-    // staging(编译产物目录)默认落在 user data 之下。
-    #expect(try await env.root.stagingDirectory().hasPrefix(userDirectory))
+    // 配置/部署分离(§9):staging 由目录布局决定(分代隔离),不在配置目录之内。
+    // 注:logDir 只入不出(traits 可设,无 getter),无法在此直接断言。
+    #expect(try await env.root.stagingDirectory() == env.layout.stagingDirectory.path)
     #expect(try await env.root.prebuiltDataDirectory().isEmpty == false)
   }
 

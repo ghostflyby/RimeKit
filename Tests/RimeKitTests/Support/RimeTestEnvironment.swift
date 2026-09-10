@@ -111,8 +111,10 @@ final class RimeNotificationLog: Sendable {
 /// (对应 librime gtest 的 `rime_test_main.cc` Environment;Squirrel 的
 /// `setupRime` + `startRime` 流程)。
 final class RimeTestRuntime: Sendable {
-  /// 夹具数据目录(同时是 traits 的 shared/user data dir;生命周期测试断言目录回读)。
-  let userDirectory: URL
+  /// 目录布局(配置/部署分离 + 代次隔离;此处即 dogfood 产品 API)。
+  let layout: RimeDirectoryLayout
+  /// 配置目录(夹具数据所在;生命周期测试断言目录回读)。
+  var userDirectory: URL { layout.configurationDirectory }
   /// 自 bootstrap 注册起的全局通知流水(部署/选项/方案切换断言的数据源)。
   let notifications: RimeNotificationLog
   /// 唯一根 actor 实例:诞生于连接对服务端,`inProcess` 后端持其本地引用。
@@ -123,9 +125,9 @@ final class RimeTestRuntime: Sendable {
   #endif
 
   private init(
-    userDirectory: URL, notifications: RimeNotificationLog, root: Rime
+    layout: RimeDirectoryLayout, notifications: RimeNotificationLog, root: Rime
   ) {
-    self.userDirectory = userDirectory
+    self.layout = layout
     self.notifications = notifications
     self.root = root
     #if os(macOS)
@@ -135,10 +137,10 @@ final class RimeTestRuntime: Sendable {
 
   #if os(macOS)
   private init(
-      userDirectory: URL, notifications: RimeNotificationLog, root: Rime,
+      layout: RimeDirectoryLayout, notifications: RimeNotificationLog, root: Rime,
     wirePair: RimeXPCWirePair
   ) {
-    self.userDirectory = userDirectory
+    self.layout = layout
     self.notifications = notifications
     self.root = root
     self.wirePair = wirePair
@@ -151,10 +153,10 @@ final class RimeTestRuntime: Sendable {
   fileprivate static func deploy() async throws -> RimeTestRuntime {
     let baseDirectory = FileManager.default.temporaryDirectory
       .appendingPathComponent("rimekit-tests-\(UUID().uuidString)", isDirectory: true)
-    let userDirectory = baseDirectory.appendingPathComponent("user", isDirectory: true)
-    let logDirectory = baseDirectory.appendingPathComponent("log", isDirectory: true)
-    try FileManager.default.createDirectory(at: userDirectory, withIntermediateDirectories: true)
-    try FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
+    // 目录布局走产品 API(dogfood):配置/部署分离 + 代次隔离。
+    let layout = RimeDirectoryLayout(root: baseDirectory, generation: .blue)
+    try layout.prepare()
+    let userDirectory = layout.configurationDirectory
     try MinimalRimeData.write(into: userDirectory)
     // 夹具目录留在系统临时目录便于失败取证(librime 日志在 log/ 下),由系统清理。
 
@@ -168,15 +170,12 @@ final class RimeTestRuntime: Sendable {
     #endif
     let notifications = RimeNotificationLog.installCollector()
 
-    var traits = RimeTraits(
-      sharedDataDir: userDirectory.path,
-      userDataDir: userDirectory.path,
+    let traits = layout.makeTraits(
+      sharedDataDir: userDirectory,
       distributionName: "RimeKit",
       distributionCodeName: "dev.rimekit",
       distributionVersion: "0.1",
-      appName: "RimeKitTests",
-      minLogLevel: .warning)
-    traits.logDir = logDirectory.path
+      appName: "RimeKitTests")
 
     try await root.setup(with: traits)
     try await root.initialize(with: traits)
@@ -216,11 +215,11 @@ final class RimeTestRuntime: Sendable {
 
     #if os(macOS)
     return RimeTestRuntime(
-      userDirectory: userDirectory, notifications: notifications, root: root,
+      layout: layout, notifications: notifications, root: root,
       wirePair: wirePair)
     #else
     return RimeTestRuntime(
-      userDirectory: userDirectory, notifications: notifications, root: root)
+      layout: layout, notifications: notifications, root: root)
     #endif
   }
 }
@@ -247,6 +246,7 @@ final class RimeTestEnvironment: Sendable {
   fileprivate let runtime: RimeTestRuntime
 
   var userDirectory: URL { runtime.userDirectory }
+  var layout: RimeDirectoryLayout { runtime.layout }
   var notifications: RimeNotificationLog { runtime.notifications }
 
   fileprivate init(backend: RimeBackend, runtime: RimeTestRuntime, root: Rime) {
