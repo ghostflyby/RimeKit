@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # macOS 全量测试:双后端参数化(进程内 / 进程内 XPC 连接对)65 项
+  macos-test:
+    name: macOS · swift test
+    runs-on: macos-latest # macos-26 arm64,Xcode 26.x(swift-tools 6.2 需要)
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        run: swift test
+
+  # iOS 目标构建:库 + 测试目标(iOS 16 地板;generic 目的地无需模拟器设备)
+  ios-build:
+    name: iOS · build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: xcodebuild build-for-testing (generic iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -scheme RimeKit-Package \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipMacroValidation -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tail -40
+
+  # iOS 模拟器运行测试(设备 id 运行时发现,抗模拟器名称/OS 漂移)
+  ios-test:
+    name: iOS · simulator test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select simulator
+        run: |
+          SIM_ID=$(xcrun simctl list devices available | grep -m1 'iPhone' | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+          echo "SIM_ID=$SIM_ID" >> "$GITHUB_ENV"
+      - name: xcodebuild test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme RimeKit-Package \
+            -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -skipMacroValidation -skipPackagePluginValidation \
+            2>&1 | tail -40

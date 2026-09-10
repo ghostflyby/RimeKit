@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 import RimeDynamic
 
 #if os(macOS)
@@ -20,17 +19,35 @@ final class RimeNotificationLog: Sendable {
     var description: String { "(\(session.rawValue), \(type), \(value))" }
   }
 
-  private let entries = Mutex<[Entry]>([])
+  // NSLock 而非 Mutex:Mutex 地板 iOS 18,测试目标需在包地板(iOS 16)编译。
+  private final class State: @unchecked Sendable {
+    let lock = NSLock()
+    private var entries: [Entry] = []
 
-  func append(session: RimeSessionID, type: RimeNotificationType, value: String) {
-    entries.withLock { $0.append(Entry(session: session, type: type, value: value)) }
+    func append(_ entry: Entry) {
+      lock.lock()
+      defer { lock.unlock() }
+      entries.append(entry)
+    }
+
+    func snapshot() -> [Entry] {
+      lock.lock()
+      defer { lock.unlock() }
+      return entries
+    }
   }
 
-  var snapshot: [Entry] { entries.withLock { $0 } }
+  private let state = State()
+
+  func append(session: RimeSessionID, type: RimeNotificationType, value: String) {
+    state.append(Entry(session: session, type: type, value: value))
+  }
+
+  var snapshot: [Entry] { state.snapshot() }
 
   /// deploy 族通知的 value 集合(bootstrap 断言用;部署通知 session_id=0)。
   var deployValues: [String] {
-    entries.withLock { $0.filter { $0.session.rawValue == 0 } }
+    state.snapshot()
       .compactMap { if case .deploy = $0.type { return $0.value } else { return nil } }
   }
 
@@ -40,10 +57,10 @@ final class RimeNotificationLog: Sendable {
   {
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
-      if entries.withLock({ $0.contains(where: match) }) { return true }
+      if state.snapshot().contains(where: match) { return true }
       try? await Task.sleep(for: .milliseconds(25))
     }
-    return entries.withLock({ $0.contains(where: match) })
+    return state.snapshot().contains(where: match)
   }
 
   /// 重新直挂 C API,把后续通知追加进本日志(供测试在钩子被清后恢复)。

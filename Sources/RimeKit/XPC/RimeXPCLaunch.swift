@@ -23,14 +23,15 @@ public extension Rime {
   static func serveXPC(
     shouldAccept: (@Sendable (_ pid: pid_t, _ euid: uid_t) -> Bool)? = nil
   ) -> Never {
-    let server: XPCRootActorServer<Rime>
-    if let shouldAccept {
-      server = XPCRootActorServer(Rime.self, shouldAccept: { connection in
-        shouldAccept(connection.pid, connection.euid)
-      })
-    } else {
-      server = XPCRootActorServer(Rime.self)
+    guard let shouldAccept else {
+      // 无审计需求:与上游入口完全一致(每 peer 一个 Rime 实例,默认全接受)。
+      distributedXPCMain(Rime.self)
     }
+    // 分布式方法参数不可序列化、xpcMain 不暴露 shouldAccept,审计钩子只能
+    // 在此手装:server 逐连接构造 + accept(与上游 distributedXPCMain 同型)。
+    let server = XPCRootActorServer(Rime.self, shouldAccept: { connection in
+      shouldAccept(connection.pid, connection.euid)
+    })
     return xpcMain { server.accept($0) }
   }
 }

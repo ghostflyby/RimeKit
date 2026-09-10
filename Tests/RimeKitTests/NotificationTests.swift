@@ -1,4 +1,3 @@
-import Synchronization
 import Testing
 
 @testable import RimeKit

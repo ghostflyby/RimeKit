@@ -48,7 +48,9 @@ let package = Package(
         .product(name: "RimeDynamic", package: "librime-xcframework"),
         // 进程内 XPC 连接对(SwiftXPC IntegrationConnectionPair 范式);
         // 经 @testable 访问 reserveRootID/bind(SwiftPM debug 构建对依赖开 testability)。
-        .product(name: "SwiftXPC", package: "SwiftXPC"),
+        .product(
+          name: "SwiftXPC", package: "SwiftXPC",
+          condition: .when(platforms: [.macOS])),
         .product(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS])),

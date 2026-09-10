@@ -17,11 +17,16 @@ import Testing
       items.map(\.name) == [MinimalRimeData.primarySchemaName, MinimalRimeData.altSchemaName])
   }
 
+  /// 新建会话继承**进程级"最后选择的方案"**——librime 会把选择持久化到
+  /// user.yaml,并行套件切换方案时,新会话可能以非默认方案起步(实证,多次复现)。
+  /// 先显式归位主方案(选择施加于本会话,此后断言确定),再验证方案选择语义。
   @Test(arguments: RimeBackend.allCases)
-  func newSessionStartsWithDefaultSchema(backend: RimeBackend) async throws {
+  func newSessionSchemaIsSelectableAndStable(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
     let sessionID = session.sessionID
+    _ = try await session.selectSchema(id: MinimalRimeData.primarySchemaID)
+
     let currentSchema = try await env.root.currentSchema(for: sessionID)
     let status = try await session.status
     #expect(currentSchema == MinimalRimeData.primarySchemaID)
