@@ -129,7 +129,7 @@ import Testing
     let mapIterator = try await env.root.beginMap(forKey: "map", in: config)
     var mapKeys: [String] = []
     while let location = try await env.root.advanceConfigIterator(mapIterator) {
-      mapKeys.append(try await #require(location.key))
+      mapKeys.append(try #require(location.key))
     }
     try await env.root.endConfigIterator(mapIterator)
     #expect(mapKeys == ["a", "b"])

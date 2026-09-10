@@ -19,7 +19,7 @@ import Testing
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await sessionTypingPagingCode(env)
     let context = try await session.context
-    let menu = try await #require(context?.menu)
+    let menu = try #require(context?.menu)
     #expect(menu.pageSize == MinimalRimeData.pageSize)
     #expect(menu.pageNumber == 0)
     #expect(menu.isLastPage == false)
@@ -39,7 +39,7 @@ import Testing
     let firstStep = try await session.processKey(Key.pageDown, modifierMask: 0)
     #expect(firstStep == true)
     var context = try await session.context
-    var menu = try await #require(context?.menu)
+    var menu = try #require(context?.menu)
     #expect(menu.pageNumber == 1)
     #expect(menu.candidates.map(\.text) == Array(MinimalRimeData.mmmmCandidates[5..<10]))
     #expect(menu.isLastPage == false)
@@ -47,7 +47,7 @@ import Testing
     let secondStep = try await session.processKey(Key.pageDown, modifierMask: 0)
     #expect(secondStep == true)
     context = try await session.context
-    menu = try await #require(context?.menu)
+    menu = try #require(context?.menu)
     #expect(menu.pageNumber == 2)
     #expect(menu.isLastPage == true)
     #expect(menu.candidates.map(\.text) == Array(MinimalRimeData.mmmmCandidates.suffix(2)))
@@ -56,13 +56,13 @@ import Testing
     let overshoot = try await session.processKey(Key.pageDown, modifierMask: 0)
     #expect(overshoot == true)
     context = try await session.context
-    menu = try await #require(context?.menu)
+    menu = try #require(context?.menu)
     #expect(menu.pageNumber == 2)
 
     let backward = try await session.processKey(Key.pageUp, modifierMask: 0)
     #expect(backward == true)
     context = try await session.context
-    menu = try await #require(context?.menu)
+    menu = try #require(context?.menu)
     #expect(menu.pageNumber == 1)
   }
 
@@ -73,13 +73,13 @@ import Testing
 
     let highlighted = try await session.highlightCandidate(at: 3)
     var context = try await session.context
-    var menu = try await #require(context?.menu)
+    var menu = try #require(context?.menu)
     #expect(highlighted == true)
     #expect(menu.highlightedCandidateIndex == 3)
 
     let highlightedOnPage = try await session.highlightCandidateOnCurrentPage(at: 1)
     context = try await session.context
-    menu = try await #require(context?.menu)
+    menu = try #require(context?.menu)
     #expect(highlightedOnPage == true)
     #expect(menu.highlightedCandidateIndex == 1)
   }
@@ -126,7 +126,7 @@ import Testing
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await sessionTypingPagingCode(env)
     let iterator = try await env.root.candidateList(fromIndex: 10, for: session.sessionID)
-    let unwrapped = try await #require(iterator)
+    let unwrapped = try #require(iterator)
     var texts: [String] = []
     while let candidate = try await env.root.advanceCandidateIterator(unwrapped) {
       texts.append(candidate.text)
