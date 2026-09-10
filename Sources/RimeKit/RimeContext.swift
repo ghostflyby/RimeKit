@@ -14,8 +14,10 @@ extension RimeContext {
   fileprivate init(rawValue: RimeContextRaw) {
     composition = RimeComposition(rawValue.composition)
     menu = RimeMenu(rawValue.menu)
-    commitTextPreview = String(cString: rawValue.commit_text_preview)
-    selectLabels = rawValue.select_labels.toStringArray()
+    // 空组合时下列 char* 字段为 NULL,统一按空串处理(不得强解包)。
+    commitTextPreview = rawValue.commit_text_preview.map { String(cString: $0) } ?? ""
+    // 空组合时 librime 不分配标签数组(nil),按空表处理。
+    selectLabels = rawValue.select_labels?.toStringArray() ?? []
   }
 }
 
@@ -52,7 +54,7 @@ extension RimeComposition {
     cursorPosition = cStruct.cursor_pos
     selectionStart = cStruct.sel_start
     selectionEnd = cStruct.sel_end
-    preedit = String(cString: cStruct.preedit)
+    preedit = cStruct.preedit.map { String(cString: $0) } ?? ""
   }
 }
 
@@ -63,8 +65,8 @@ public struct RimeCandidate: Sendable, Codable {
 
 extension RimeCandidate {
   fileprivate init(_ cStruct: RimeDynamic.RimeCandidate) {
-    text = String(cString: cStruct.text)
-    comment = String(cString: cStruct.comment)
+    text = cStruct.text.map { String(cString: $0) } ?? ""
+    comment = cStruct.comment.map { String(cString: $0) } ?? ""
   }
 }
 
@@ -83,10 +85,13 @@ extension RimeMenu {
     pageNumber = cStruct.page_no
     isLastPage = cStruct.is_last_page
     highlightedCandidateIndex = cStruct.highlighted_candidate_index
-    selectKeys = String(cString: cStruct.select_keys)
+    selectKeys = cStruct.select_keys.map { String(cString: $0) } ?? ""
     let numCandidates = Int(cStruct.num_candidates)
-    let buffer = UnsafeBufferPointer(start: cStruct.candidates, count: numCandidates)
-    candidates = buffer.map { RimeCandidate($0) }
+    // 无候选时 librime 不分配候选数组(指针为 nil):按空表处理,不得强解包
+    // ——空组合上读 context 即崩,已由功能测试实证。
+    candidates = cStruct.candidates.map { pointer in
+      UnsafeBufferPointer(start: pointer, count: numCandidates).map { RimeCandidate($0) }
+    } ?? []
   }
 }
 
@@ -113,7 +118,9 @@ extension RimeServiceRoot {
   func engineAdvanceCandidateIterator(_ iterator: ObjectHandle<RimeCandidate>) throws(RimeError)
     -> RimeCandidate?
   {
-    var iter = candidateIterators[iterator]!
+    guard var iter = candidateIterators[iterator] else {
+      throw RimeError.invalidHandle(kind: .candidateIterator, id: iterator.id)
+    }
     if rimeApi.candidate_list_next(&iter) {
       candidateIterators[iterator] = iter
       return RimeCandidate(iter.candidate)

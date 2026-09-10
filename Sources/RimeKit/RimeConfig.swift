@@ -112,7 +112,9 @@ extension RimeConfig {
 extension RimeServiceRoot {
 
   func engineClose(config: ObjectHandle<RimeConfig>) throws(RimeError) -> Bool {
-    guard var config = configs[config] else {
+    // 关闭即从句柄表移除:句柄一次性,复用抛 invalidHandle 而非悬垂读取已释放的
+    // rime_config_t(重复 close——如显式 close 与门面 deinit 竞合——由此自然幂等化)。
+    guard var config = configs.removeValue(forKey: config) else {
       throw RimeError.invalidHandle(kind: .config, id: config.id)
     }
     return rimeApi.config_close(&config)
@@ -125,13 +127,13 @@ extension RimeServiceRoot {
       throw RimeError.invalidHandle(kind: .config, id: config.id)
     }
 
-    let cStr = rimeApi.config_get_cstring(&config, key)
-    defer { cStr?.deallocate() }
-    return if let cStr = cStr {
-      String(cString: cStr)
-    } else {
-      nil
+    // config_get_cstring 返回 const char*:借用指针,所有权在配置、生命周期与配置
+    // 一致(头文件签名 const;API 无配套 free 入口)。只能拷贝,释放即堆损坏
+    // ——malloc abort 已由 ConfigTests 实证。
+    guard let cStr = rimeApi.config_get_cstring(&config, key) else {
+      return nil
     }
+    return String(cString: cStr)
   }
 
   func engineSet(value: String, forKey key: String, in config: ObjectHandle<RimeConfig>)
