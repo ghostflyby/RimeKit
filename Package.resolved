@@ -1,13 +1,13 @@
 {
-  "originHash" : "16196337953fcf9bdb9fb1910342a75f9da7efd0e7b0a3405a3807de2246a617",
+  "originHash" : "08dd431189b4428828de4b622b729d788dca9638005bc86ae4b0e88373efb7a2",
   "pins" : [
     {
       "identity" : "librime-xcframework",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ghostflyby/librime-xcframework",
       "state" : {
-        "revision" : "c3cbebee642a3f880fcd038f03b59842f8a5c7d1",
-        "version" : "1.16.1-pack.8"
+        "revision" : "2b11a6c862ad12a6f27efe77eca1c18a1e1889fb",
+        "version" : "1.17.0-pack.2"
       }
     },
     {

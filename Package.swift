@@ -16,7 +16,7 @@ let package = Package(
   ],
   dependencies: [
     .package(
-      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.16.1-pack.8",
+      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.2",
       // traits: [.trait(name: "dynamic")]
     ),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
