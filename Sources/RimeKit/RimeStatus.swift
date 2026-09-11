@@ -1,15 +1,15 @@
 import RimeDynamic
 
 public struct RimeStatus: Sendable, Codable {
-  let schemaID: String
-  let schemaName: String
-  let isDisabled: Bool
-  let isComposing: Bool
-  let isASCIIMode: Bool
-  let isFullShape: Bool
-  let isSimplified: Bool
-  let isTraditional: Bool
-  let isASCIIPunctuation: Bool
+  public let schemaID: String
+  public let schemaName: String
+  public let isDisabled: Bool
+  public let isComposing: Bool
+  public let isASCIIMode: Bool
+  public let isFullShape: Bool
+  public let isSimplified: Bool
+  public let isTraditional: Bool
+  public let isASCIIPunctuation: Bool
 }
 
 extension RimeStatus {

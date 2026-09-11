@@ -4,10 +4,10 @@ import RimeDynamic
 typealias RimeContextRaw = RimeDynamic.rime_context_t_stdbool
 
 public struct RimeContext: Sendable, Codable {
-  let composition: RimeComposition
-  let menu: RimeMenu
-  let commitTextPreview: String
-  let selectLabels: [String]
+  public let composition: RimeComposition
+  public let menu: RimeMenu
+  public let commitTextPreview: String
+  public let selectLabels: [String]
 }
 
 extension RimeContext {
@@ -41,11 +41,11 @@ extension Rime {
 }
 
 public struct RimeComposition: Sendable, Codable {
-  let length: Int32
-  let cursorPosition: Int32
-  let selectionStart: Int32
-  let selectionEnd: Int32
-  let preedit: String
+  public let length: Int32
+  public let cursorPosition: Int32
+  public let selectionStart: Int32
+  public let selectionEnd: Int32
+  public let preedit: String
 }
 
 extension RimeComposition {
@@ -59,8 +59,8 @@ extension RimeComposition {
 }
 
 public struct RimeCandidate: Sendable, Codable {
-  let text: String
-  let comment: String
+  public let text: String
+  public let comment: String
 }
 
 extension RimeCandidate {
@@ -71,12 +71,12 @@ extension RimeCandidate {
 }
 
 public struct RimeMenu: Sendable, Codable {
-  let pageSize: Int32
-  let pageNumber: Int32
-  let isLastPage: Bool
-  let highlightedCandidateIndex: Int32
-  let candidates: [RimeCandidate]
-  let selectKeys: String
+  public let pageSize: Int32
+  public let pageNumber: Int32
+  public let isLastPage: Bool
+  public let highlightedCandidateIndex: Int32
+  public let candidates: [RimeCandidate]
+  public let selectKeys: String
 }
 
 extension RimeMenu {

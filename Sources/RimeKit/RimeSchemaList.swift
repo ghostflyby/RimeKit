@@ -1,8 +1,8 @@
 import RimeDynamic
 
 public struct RimeSchemaListItem: Sendable, Codable {
-  let schemaID: String
-  let name: String
+  public let schemaID: String
+  public let name: String
 }
 
 extension RimeSchemaListItem {
@@ -13,7 +13,7 @@ extension RimeSchemaListItem {
 }
 
 public struct RimeSchemaList: Sendable, Codable {
-  let items: [RimeSchemaListItem]
+  public let items: [RimeSchemaListItem]
 }
 
 extension RimeSchemaList {

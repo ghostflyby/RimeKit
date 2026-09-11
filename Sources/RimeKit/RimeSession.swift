@@ -11,7 +11,7 @@ public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
 }
 
 public struct RimeSession: ~Copyable {
-  internal let sessionID: RimeSessionID
+  internal let id: RimeSessionID
   internal let root: Rime
 
   /// 进程内公开工厂:绑定共享引擎(iOS/进程内路径的公开入口)。
@@ -19,22 +19,27 @@ public struct RimeSession: ~Copyable {
     try await self.init(root: .localShared)
   }
 
-  init(root: Rime) async throws {
-    self.sessionID = try await root.createSession()
+  /// 绑定任意根引用(本地实例或 XPC 代理):输入法宿主的公开入口。
+  public init(root: Rime) async throws {
+    self.id = try await root.createSession()
     self.root = root
   }
 
-  init?(root: Rime, sessionID: RimeSessionID) async throws {
+  /// 绑定既有会话(findSession 校验;失效返回 nil,调用方可重建)。
+  public init?(root: Rime, sessionID: RimeSessionID) async throws {
     guard try await root.findSession(with: sessionID) else { return nil }
-    self.sessionID = sessionID
+    self.id = sessionID
     self.root = root
   }
 
   deinit {
     let root = root
-    let sessionID = sessionID
-    Task { try? await root.destroySession(with: sessionID) }
+    let id = id
+    Task { try? await root.destroySession(with: id) }
   }
+
+  /// 会话 ID(供重连/迁移场景重建句柄)。
+  public var sessionID: RimeSessionID { id }
 }
 
 extension RimeSession {
