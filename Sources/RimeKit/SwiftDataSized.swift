@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2025-2026 ghostflyby
 // SPDX-License-Identifier: MPL-2.0
 //
+// swift-format:disable: AlwaysUseLowerCamelCase
+// `data_size` 为 rime_*_t C 结构体真字段名(keypath 测量依赖),不可改驼峰。
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
