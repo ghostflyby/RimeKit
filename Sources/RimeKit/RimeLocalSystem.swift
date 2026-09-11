@@ -92,7 +92,8 @@ public struct RimeLocalEncoder: DistributedTargetInvocationEncoder {
   ) throws {}
 
   public mutating func recordReturnType<Res: SerializationRequirement>(_ resultType: Res.Type)
-    throws {}
+    throws
+  {}
 
   public mutating func recordErrorType<E: Error>(_ type: E.Type) throws {}
 

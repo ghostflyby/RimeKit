@@ -57,11 +57,12 @@ extension RimeConfig {
       Task {
         let iter: ObjectHandle<RimeConfigIterator>?
         do {
-          iter = if mode == .list {
-            try await root.beginList(forKey: key, in: handle)
-          } else {
-            try await root.beginMap(forKey: key, in: handle)
-          }
+          iter =
+            if mode == .list {
+              try await root.beginList(forKey: key, in: handle)
+            } else {
+              try await root.beginMap(forKey: key, in: handle)
+            }
         } catch {
           continuation.finish()
           return

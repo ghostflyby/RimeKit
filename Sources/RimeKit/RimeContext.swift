@@ -96,9 +96,10 @@ extension RimeMenu {
     let numCandidates = Int(cStruct.num_candidates)
     // 无候选时 librime 不分配候选数组(指针为 nil):按空表处理,不得强解包
     // ——空组合上读 context 即崩,已由功能测试实证。
-    candidates = cStruct.candidates.map { pointer in
-      UnsafeBufferPointer(start: pointer, count: numCandidates).map { RimeCandidate($0) }
-    } ?? []
+    candidates =
+      cStruct.candidates.map { pointer in
+        UnsafeBufferPointer(start: pointer, count: numCandidates).map { RimeCandidate($0) }
+      } ?? []
   }
 }
 
@@ -142,9 +143,11 @@ extension Rime {
     }
   }
 
-  func engineCandidateList(fromIndex: Int32, for sessionID: RimeSessionID) throws(RimeError) -> ObjectHandle<
-    RimeCandidate
-  >? {
+  func engineCandidateList(fromIndex: Int32, for sessionID: RimeSessionID) throws(RimeError)
+    -> ObjectHandle<
+      RimeCandidate
+    >?
+  {
     let handle = ObjectHandle<RimeCandidate>()
     var iterator = rime_candidate_list_iterator_t()
     _ = rimeApi.candidate_list_from_index(sessionID.rawValue, &iterator, fromIndex)
@@ -152,7 +155,8 @@ extension Rime {
     return handle
   }
 
-  func engineStateLabel(for key: String, state: RimeState, in session: RimeSessionID) throws(RimeError)
+  func engineStateLabel(for key: String, state: RimeState, in session: RimeSessionID)
+    throws(RimeError)
     -> String?
   {
     guard let cStr = rimeApi.get_state_label(session.rawValue, key, state == .on) else {
@@ -184,7 +188,8 @@ extension Rime {
     return rimeApi.delete_candidate_on_current_page(session.rawValue, index)
   }
 
-  func engineHighlightCandidate(at index: Int, for session: RimeSessionID) throws(RimeError) -> Bool {
+  func engineHighlightCandidate(at index: Int, for session: RimeSessionID) throws(RimeError) -> Bool
+  {
     return rimeApi.highlight_candidate(session.rawValue, index)
   }
 
@@ -194,7 +199,9 @@ extension Rime {
     return rimeApi.highlight_candidate_on_current_page(session.rawValue, index)
   }
 
-  func enginePage(_ direction: RimePageDirection, for session: RimeSessionID) throws(RimeError) -> Bool {
+  func enginePage(_ direction: RimePageDirection, for session: RimeSessionID) throws(RimeError)
+    -> Bool
+  {
     return rimeApi.change_page(session.rawValue, direction == .forward)
   }
 }
@@ -232,7 +239,9 @@ extension RimeSession {
     try await root.stateLabel(for: key, state: state, in: sessionID)
   }
 
-  public func stateLabel(for key: String, state: RimeState, abbreviated: Bool) async throws -> String? {
+  public func stateLabel(for key: String, state: RimeState, abbreviated: Bool) async throws
+    -> String?
+  {
     try await root.stateLabel(for: key, state: state, abbreviated: abbreviated, in: sessionID)
   }
 }

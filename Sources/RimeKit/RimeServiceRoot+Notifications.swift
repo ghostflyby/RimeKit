@@ -5,13 +5,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#if os(macOS)
-import DistributedXPC
-import Foundation
-#endif
 import RimeDynamic
 
-public extension Rime {
+#if os(macOS)
+  import DistributedXPC
+  import Foundation
+#endif
+
+extension Rime {
   /// 设置进程/服务引擎的全局通知回调(`nil` = 退订,替换语义)。
   ///
   /// 按引用形态自动分派(§8):
@@ -22,16 +23,16 @@ public extension Rime {
   ///
   /// librime 为进程全局单 handler(§1.3):重复设置即替换;本地/远程单槽各自独立
   /// (本地 = 进程 C 槽位,远程 = 所连服务进程的 sink 槽位)。
-  nonisolated func setNotificationHandler(
+  public nonisolated func setNotificationHandler(
     _ handler: RimeNotificationHandler?
   ) async throws {
     // 本地性判定:语言层无 isRemote(提案评审移除),改用 system 注册表——
     // 服务端 system 能 resolve 到本 actor(本地),客户端代理不能(远程)。
     let isLocal: Bool
     #if os(macOS)
-    isLocal = ((try? actorSystem.resolve(id: id, as: Self.self)) ?? nil) != nil
+      isLocal = ((try? actorSystem.resolve(id: id, as: Self.self)) ?? nil) != nil
     #else
-    isLocal = true  // RimeLocalSystem 无远程形态
+      isLocal = true  // RimeLocalSystem 无远程形态
     #endif
 
     if let handler {
@@ -39,30 +40,30 @@ public extension Rime {
         RimeGlobalNotificationHook.install(handler)
       } else {
         #if os(macOS)
-        try await setNotificationSink(.create(handler))
+          try await setNotificationSink(.create(handler))
         #endif
       }
     } else if isLocal {
       RimeGlobalNotificationHook.clear()
     } else {
       #if os(macOS)
-      try await setNotificationSink(nil)
+        try await setNotificationSink(nil)
       #endif
     }
   }
 }
 
 #if os(macOS)
-extension RimeNotificationSink {
-  /// 进程级共享宿主 system(匿名监听):sink 每次设置重建,system 常驻复用,
-  /// 避免高频设置时的 mach port 开销(§2.4)。
-  fileprivate static let sharedSystem = XPCDistributedActorSystem(
-    connection: XPCConnection(name: nil))
+  extension RimeNotificationSink {
+    /// 进程级共享宿主 system(匿名监听):sink 每次设置重建,system 常驻复用,
+    /// 避免高频设置时的 mach port 开销(§2.4)。
+    fileprivate static let sharedSystem = XPCDistributedActorSystem(
+      connection: XPCConnection(name: nil))
 
-  fileprivate static func create(
-    _ handler: @escaping RimeNotificationHandler
-  ) -> RimeNotificationSink {
-    RimeNotificationSink(actorSystem: sharedSystem, handler: handler)
+    fileprivate static func create(
+      _ handler: @escaping RimeNotificationHandler
+    ) -> RimeNotificationSink {
+      RimeNotificationSink(actorSystem: sharedSystem, handler: handler)
+    }
   }
-}
 #endif

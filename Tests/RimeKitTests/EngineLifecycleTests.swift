@@ -51,7 +51,6 @@ import Testing
   /// 即使是"未知方案"的失败任务也会短暂置起维护态(实证:并行套件的会话调用
   /// 随即静默 false)。部署侧行为留给 remote 后端阶段的隔离环境测试。
 
-
   @Test(arguments: RimeBackend.allCases)
   func identitySmoke(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)

@@ -104,7 +104,8 @@ extension Rime {
 }
 
 extension Rime {
-  func engineProcessKey(keyCode: Int32, modifierMask: Int32, for sessionID: RimeSessionID) throws(RimeError) -> Bool
+  func engineProcessKey(keyCode: Int32, modifierMask: Int32, for sessionID: RimeSessionID)
+    throws(RimeError) -> Bool
   {
     rimeApi.process_key(sessionID.rawValue, keyCode, modifierMask)
   }

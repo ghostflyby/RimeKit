@@ -89,7 +89,9 @@ struct SessionLifecycleTests {
     }
   }
 
-  @Test(.disabled("cleanup 是进程级破坏性操作,会连带销毁并行套件的活跃会话;待 remote 后端(每后端独立服务进程)经参数化启用"), arguments: RimeBackend.allCases)
+  @Test(
+    .disabled("cleanup 是进程级破坏性操作,会连带销毁并行套件的活跃会话;待 remote 后端(每后端独立服务进程)经参数化启用"),
+    arguments: RimeBackend.allCases)
   func cleanupAllSessionsEmptiesTable(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let sessionID = try await env.root.createSession()

@@ -8,11 +8,11 @@
 import Foundation
 import RimeDynamic
 
-#if os(macOS)
-import DistributedXPC
-#endif
-
 @testable import RimeKit
+
+#if os(macOS)
+  import DistributedXPC
+#endif
 
 // MARK: - 通知日志
 
@@ -127,8 +127,8 @@ final class RimeTestRuntime: Sendable {
   /// 唯一根 actor 实例:诞生于连接对服务端,`inProcess` 后端持其本地引用。
   let root: Rime
   #if os(macOS)
-  /// 进程内连接对(`inProcessXPC` 后端的线缆通道);持有全部连接的生命周期。
-  let wirePair: RimeXPCWirePair?
+    /// 进程内连接对(`inProcessXPC` 后端的线缆通道);持有全部连接的生命周期。
+    let wirePair: RimeXPCWirePair?
   #endif
 
   private init(
@@ -138,20 +138,20 @@ final class RimeTestRuntime: Sendable {
     self.notifications = notifications
     self.root = root
     #if os(macOS)
-    self.wirePair = nil
+      self.wirePair = nil
     #endif
   }
 
   #if os(macOS)
-  private init(
+    private init(
       layout: RimeDirectoryLayout, notifications: RimeNotificationLog, root: Rime,
-    wirePair: RimeXPCWirePair
-  ) {
-    self.layout = layout
-    self.notifications = notifications
-    self.root = root
-    self.wirePair = wirePair
-  }
+      wirePair: RimeXPCWirePair
+    ) {
+      self.layout = layout
+      self.notifications = notifications
+      self.root = root
+      self.wirePair = wirePair
+    }
   #endif
 
   /// 部署一次:Squirrel 形态的初始化序列(setup → 通知回调 → initialize →
@@ -170,8 +170,8 @@ final class RimeTestRuntime: Sendable {
     // 根 actor 诞生于进程内 XPC 连接对的服务端(单一执行域,双后端共享;
     // 写法复制自 SwiftXPC DistributedXPCIntegrationTests.makeConnectionPair)。
     #if os(macOS)
-    let wirePair = try RimeXPCWirePair.make()
-    let root = wirePair.servedRoot
+      let wirePair = try RimeXPCWirePair.make()
+      let root = wirePair.servedRoot
     #else
       let root = Rime(actorSystem: RimeLocalSystem())
     #endif
@@ -221,12 +221,12 @@ final class RimeTestRuntime: Sendable {
     _ = try await root.destroySession(with: probe)
 
     #if os(macOS)
-    return RimeTestRuntime(
-      layout: layout, notifications: notifications, root: root,
-      wirePair: wirePair)
+      return RimeTestRuntime(
+        layout: layout, notifications: notifications, root: root,
+        wirePair: wirePair)
     #else
-    return RimeTestRuntime(
-      layout: layout, notifications: notifications, root: root)
+      return RimeTestRuntime(
+        layout: layout, notifications: notifications, root: root)
     #endif
   }
 }
@@ -311,11 +311,11 @@ private actor RimeBootstrap {
     case .inProcess:
       root = runtime.root
     #if os(macOS)
-    case .inProcessXPC:
-      guard let pair = runtime.wirePair else {
-        throw RimeTestFailure(stage: "backend", detail: "运行时缺少进程内 XPC 连接对")
-      }
-      root = try pair.resolveProxy()
+      case .inProcessXPC:
+        guard let pair = runtime.wirePair else {
+          throw RimeTestFailure(stage: "backend", detail: "运行时缺少进程内 XPC 连接对")
+        }
+        root = try pair.resolveProxy()
     #endif
     }
 

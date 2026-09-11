@@ -1,25 +1,54 @@
 // SPDX-FileCopyrightText: 2025-2026 ghostflyby
 // SPDX-License-Identifier: MPL-2.0
 //
-// swift-format:disable: AlwaysUseLowerCamelCase
-// `data_size` 为 rime_*_t C 结构体真字段名(keypath 测量依赖),不可改驼峰。
-//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import RimeDynamic
 
+/// 零初始化的 C 结构体统一入口:首字段 `data_size` 之前的区域为元数据,
+/// 置零后才是可用载荷;keypath 测量前缀尺寸后整块清零。
 protocol CDataSized {
-  var data_size: Int32 { get set }
+  var dataSize: Int32 { get set }
   init()
 }
 
-extension rime_context_t_stdbool: CDataSized {}
-extension rime_traits_t: CDataSized {}
-extension rime_commit_t: CDataSized {}
-extension rime_status_t_stdbool: CDataSized {}
-extension rime_module_t: CDataSized {}
+// 转发属性:C 字段真名是 data_size(不可改),协议面用驼峰。
+extension rime_context_t_stdbool: CDataSized {
+  var dataSize: Int32 {
+    get { data_size }
+    set { data_size = newValue }
+  }
+}
+
+extension rime_traits_t: CDataSized {
+  var dataSize: Int32 {
+    get { data_size }
+    set { data_size = newValue }
+  }
+}
+
+extension rime_commit_t: CDataSized {
+  var dataSize: Int32 {
+    get { data_size }
+    set { data_size = newValue }
+  }
+}
+
+extension rime_status_t_stdbool: CDataSized {
+  var dataSize: Int32 {
+    get { data_size }
+    set { data_size = newValue }
+  }
+}
+
+extension rime_module_t: CDataSized {
+  var dataSize: Int32 {
+    get { data_size }
+    set { data_size = newValue }
+  }
+}
 
 extension CDataSized {
 
@@ -30,8 +59,8 @@ extension CDataSized {
       raw.bindMemory(to: UInt8.self).update(repeating: 0)
     }
 
-    let prefixSize = MemoryLayout.size(ofValue: \Self.data_size)
-    value.data_size = Int32(MemoryLayout<Self>.size - prefixSize)
+    let prefixSize = MemoryLayout.size(ofValue: \Self.dataSize)
+    value.dataSize = Int32(MemoryLayout<Self>.size - prefixSize)
     return value
   }
 }

@@ -16,9 +16,15 @@ import Testing
   func openSchemaReadsCompiledConfig(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let config = try await #require(env.root.openSchema(MinimalRimeData.primarySchemaID))
-    #expect(try await env.root.string(forKey: "schema/name", in: config) == MinimalRimeData.primarySchemaName)
-    #expect(try await env.root.string(forKey: "schema/schema_id", in: config) == MinimalRimeData.primarySchemaID)
-    #expect(try await env.root.int(forKey: "menu/page_size", in: config) == Int32(MinimalRimeData.pageSize))
+    #expect(
+      try await env.root.string(forKey: "schema/name", in: config)
+        == MinimalRimeData.primarySchemaName)
+    #expect(
+      try await env.root.string(forKey: "schema/schema_id", in: config)
+        == MinimalRimeData.primarySchemaID)
+    #expect(
+      try await env.root.int(forKey: "menu/page_size", in: config)
+        == Int32(MinimalRimeData.pageSize))
     #expect(try await env.root.item(forKey: "engine", in: config) != nil)
     // 缺键返回 nil(非错误)。
     #expect(try await env.root.string(forKey: "no/such/key", in: config) == nil)
@@ -41,8 +47,12 @@ import Testing
     let config = try await #require(env.root.openConfig("default"))
     #expect(try await env.root.listSize(forKey: "schema_list", in: config) == 2)
     // librime 配置键语法:列表索引用 `@n`(同 custom patch 约定)。
-    #expect(try await env.root.string(forKey: "schema_list/@0/schema", in: config) == MinimalRimeData.primarySchemaID)
-    #expect(try await env.root.string(forKey: "schema_list/@1/schema", in: config) == MinimalRimeData.altSchemaID)
+    #expect(
+      try await env.root.string(forKey: "schema_list/@0/schema", in: config)
+        == MinimalRimeData.primarySchemaID)
+    #expect(
+      try await env.root.string(forKey: "schema_list/@1/schema", in: config)
+        == MinimalRimeData.altSchemaID)
     #expect(try await env.root.close(config: config) == true)
   }
 

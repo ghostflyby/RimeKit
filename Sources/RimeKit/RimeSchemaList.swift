@@ -26,21 +26,22 @@ public struct RimeSchemaList: Sendable, Codable {
 extension RimeSchemaList {
   fileprivate init(_ cStruct: RimeDynamic.RimeSchemaList) {
     // 空表时 librime 不分配 list 数组(nil):按空表处理,不得强解包。
-    items = cStruct.list.map { pointer in
-      UnsafeBufferPointer(start: pointer, count: Int(cStruct.size)).map { RimeSchemaListItem($0) }
-    } ?? []
+    items =
+      cStruct.list.map { pointer in
+        UnsafeBufferPointer(start: pointer, count: Int(cStruct.size)).map { RimeSchemaListItem($0) }
+      } ?? []
   }
 }
 
 extension Rime {
   var engineSchemaList: RimeSchemaList {
     get throws(RimeError) {
-    var schemaList = rime_schema_list_t()
-    defer { rimeApi.free_schema_list(&schemaList) }
-    guard rimeApi.get_schema_list(&schemaList) else {
-      return RimeSchemaList(items: [])
-    }
-    return RimeSchemaList(schemaList)
+      var schemaList = rime_schema_list_t()
+      defer { rimeApi.free_schema_list(&schemaList) }
+      guard rimeApi.get_schema_list(&schemaList) else {
+        return RimeSchemaList(items: [])
+      }
+      return RimeSchemaList(schemaList)
     }
   }
 
@@ -61,7 +62,9 @@ extension Rime {
     }
   }
 
-  func engineSelectSchema(_ schemaID: String, for sessionID: RimeSessionID) throws(RimeError) -> Bool {
+  func engineSelectSchema(_ schemaID: String, for sessionID: RimeSessionID) throws(RimeError)
+    -> Bool
+  {
     rimeApi.select_schema(sessionID.rawValue, schemaID)
   }
 }

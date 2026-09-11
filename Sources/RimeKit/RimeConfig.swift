@@ -334,27 +334,25 @@ extension Rime {
   func engineAdvanceConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(RimeError)
     -> RimeConfigLocation?
   {
-    guard var rime_iterator = configIterators[iterator] else {
+    guard var iter = configIterators[iterator] else {
       throw RimeError.invalidHandle(kind: .configIterator, id: iterator.id)
     }
-    if rimeApi.config_next(&rime_iterator) {
-      configIterators[iterator] = rime_iterator
+    if rimeApi.config_next(&iter) {
+      configIterators[iterator] = iter
       return RimeConfigLocation(
-        index: rime_iterator.index,
-        key: rime_iterator.key.map { String(cString: $0) },
-        path: rime_iterator.path.map { String(cString: $0) }
+        index: iter.index,
+        key: iter.key.map { String(cString: $0) },
+        path: iter.path.map { String(cString: $0) }
       )
     }
     return nil
   }
 
-  func engineEndConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(
-    RimeError
-  ) {
-    guard var rime_iterator = configIterators[iterator] else {
+  func engineEndConfigIterator(_ iterator: ObjectHandle<RimeConfigIterator>) throws(RimeError) {
+    guard var iter = configIterators[iterator] else {
       return
     }
-    _ = rimeApi.config_end(&rime_iterator)
+    _ = rimeApi.config_end(&iter)
     configIterators.removeValue(forKey: iterator)
   }
 }

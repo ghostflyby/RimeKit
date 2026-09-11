@@ -6,8 +6,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Distributed
+
 #if os(macOS)
-import DistributedXPC
+  import DistributedXPC
 #endif
 
 /// 通知回流的宿主侧接收端(§3.5)。**内部实现细节**:外部经
@@ -24,13 +25,13 @@ import DistributedXPC
 /// 直接成员,`#if` 内的方法不进元数据白表(实证),平台分支只允许出现在
 /// 属性与属性包装层。
 #if os(macOS)
-@XPCService
+  @XPCService
 #endif
 distributed actor RimeNotificationSink {
   #if os(macOS)
-  public typealias ActorSystem = XPCDistributedActorSystem
+    public typealias ActorSystem = XPCDistributedActorSystem
   #else
-  public typealias ActorSystem = RimeLocalSystem
+    public typealias ActorSystem = RimeLocalSystem
   #endif
 
   private let handler: RimeNotificationHandler

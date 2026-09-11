@@ -27,7 +27,7 @@ import Foundation
 enum RimeBackend: String, CaseIterable, Sendable, CustomStringConvertible {
   case inProcess
   #if os(macOS)
-  case inProcessXPC
+    case inProcessXPC
   #endif
 
   var description: String { rawValue }

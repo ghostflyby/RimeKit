@@ -102,7 +102,9 @@ import Testing
     #expect(commitText == MinimalRimeData.mmmmCandidates[11])
   }
 
-  @Test(.disabled("delete_candidate 在无用户词典的夹具下返回 true 但不重排候选表(语义依赖 user_dict);待 remote 阶段带用户词典环境再验证"), arguments: RimeBackend.allCases)
+  @Test(
+    .disabled("delete_candidate 在无用户词典的夹具下返回 true 但不重排候选表(语义依赖 user_dict);待 remote 阶段带用户词典环境再验证"),
+    arguments: RimeBackend.allCases)
   func removeCandidateReflowsList(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
