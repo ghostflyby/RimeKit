@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: 2025-2026 ghostflyby
 // SPDX-License-Identifier: MPL-2.0
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
