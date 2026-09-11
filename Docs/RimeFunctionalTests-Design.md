@@ -277,3 +277,49 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
   `serveXPC` 已改为直接透传(此前的 pid/euid 手装兜底随之移除);
   客户端侧 `connect(toService:peerCodeSigningRequirement:)` 可核验服务身份。
 - 退役通知 Box 保留强引用至进程结束,避免在途回调悬垂;安装次数有界,开销可忽略。
+
+
+## 10. 调查:librime 链接模式取舍与 RimeKit 预编译框架路径
+
+### 10.1 librime-xcframework 的三种产品(实证 Package.swift)
+
+| 产品 | 形态 | 定义 | 适用场景 |
+|---|---|---|---|
+| RimeDynamic(现状) | binaryTarget 动态框架 | 浅包 .framework(7.4MB/slice) | 多进程共享单副本;随 App 分发 |
+| RimeStatic | binaryTarget 静态库 | librime.a(macos 20MB)+ Headers | 自包含二进制;无需框架嵌入 |
+| RimeSystem | systemLibrary(pkg-config "rime") | 系统安装的 librime | Linux/系统包管理场景;macOS IME 分发不适用 |
+
+### 10.2 结论:RimeKit 不暴露模式选择
+
+- 三种产品是**三个不同的 Clang 模块**(`RimeDynamic`/`RimeStatic`/`RimeSystem`,各有
+  modulemap),切换 = 改 import 与依赖 = 源码级破坏性变更,不是运行时选项;
+- 同时暴露 = 平行依赖图与类型分裂(不同产品下 `Rime`/`RimeSession` 类型不互通),
+  消费者被迫三选一并锁死;
+- 模式是 RimeKit **自身的链接/分发决策**:维持 RimeDynamic(多进程共享单份 dylib,
+  页缓存与磁盘最优);预编译阶段(§10.3)再评估静态并入。
+
+### 10.3 预编译为框架的路径
+
+1. **RimeKit Package.swift**:库产品声明改 `.library(name: "RimeKit", type: .dynamic,
+   targets: ["RimeKit"])`(SPM 对 dynamic 产品产出 .framework);
+2. **librime 依赖二选一**:保持 RimeDynamic(随框架分发双框架)或切 RimeStatic
+   (librime.a 静态并入 RimeKit.framework → 自包含单框架,同时消灭浅包嵌入问题;
+   源码 `import RimeDynamic` → `import RimeStatic`,头文件同源,一次性替换);
+3. **打包脚本**(scripts/build-xcframework.sh):swift build -c release(arm64/x86_64
+   两次)→ 组装深包 RimeKit.framework(Info.plist CFBundlePackageType=FMWK +
+   install_name_tool -id @rpath/RimeKit.framework/RimeKit)→ `xcodebuild
+   -create-xcframework` → zip + SHA256 → GitHub Release;dSYM 一并归档;
+   BUILD_LIBRARY_FOR_DISTRIBUTION=YES 产出 .swiftinterface(消费者 Swift 版本解耦);
+4. **消费端(Cicada)**:`packages: RimeKit: binaryTarget(url:checksum:)`;App 嵌入
+   一份,两个 XPC 服务 linkOnly + `LD_RUNPATH_SEARCH_PATHS` 回指
+   `@loader_path/../../../../Frameworks`(该机制已就位)→ 全部二进制只保留
+   **一份** RimeKit+librime 代码。
+
+### 10.4 冗余现状与去重对照(实证 DerivedData 产物)
+
+- 现状:RimeDynamic.framework ×3(App 深包修正版 + blue.xpc 浅包 + green.xpc 浅包)
+  + Products 根散件 1 份(不入包);
+- XPC 服务去掉内嵌副本后(App rpath 共享):3 份 → 1 份 ✓ 已由前端 project.yml
+  的 LD_RUNPATH + 清理脚本实现;
+- RimeKit 自身(Swift 代码)目前仍以静态方式并入三个二进制;上述预编译框架
+  (RimeKit 转动态产品)落地后,RimeKit 代码同样归一为单份框架。
