@@ -18,7 +18,7 @@
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/ghostflyby/RimeKit.git", from: "0.1.0"),
+  .package(url: "https://github.com/ghostflyby/RimeKit.git", from: "0.0.1"),
   // librime 二进制分发(动态框架或静态库):
   .package(url: "https://github.com/ghostflyby/librime-xcframework.git", from: "1.16.1-pack.8"),
 ],
