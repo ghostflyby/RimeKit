@@ -30,7 +30,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild build-for-testing \
-            -scheme RimeKit-Package \
+            -scheme RimeKit \
             -destination 'generic/platform=iOS Simulator' \
             -skipMacroValidation -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
@@ -50,7 +50,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -scheme RimeKit-Package \
+            -scheme RimeKit \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1 | tail -40
