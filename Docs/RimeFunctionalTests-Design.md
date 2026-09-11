@@ -201,7 +201,7 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
 }
 ```
 
-`swift build --destination ios.json` → 整包(含 RimeKitRimeService)构建回绿。
+`swift build --destination ios.json` → 整包构建回绿。
 
 ## 8. 调查与落地:`setNotificationSink` 泛化为闭包输入扩展函数
 

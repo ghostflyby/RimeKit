@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		00803A4CC6D0387F10B4D01E /* RimeService.green.xpc in CopyFiles */ = {isa = PBXBuildFile; fileRef = CC7830CCE72F0BD7DA55603C /* RimeService.green.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		0C1CAFD92B4046952D6F3189 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84730754EA1254B5ACF7C3F /* main.swift */; };
 		2510A2511B0A21AEC2927EB7 /* RimeService.blue.xpc in CopyFiles */ = {isa = PBXBuildFile; fileRef = AC1CCFB71F530031A8211587 /* RimeService.blue.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		4E43BAF720A892AAC9278361 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11B8973E47619C4647AC5AA3 /* main.swift */; };
+		5EF8FE58877D1589CE266CBD /* RimeServiceMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43CF89FE7FFEFE2C8A98AD63 /* RimeServiceMain.swift */; };
+		60530F31E956A202C6554043 /* RimeServiceMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43CF89FE7FFEFE2C8A98AD63 /* RimeServiceMain.swift */; };
 		9345607834EC48261BB896C0 /* RimeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 07ACB0C416510E16D829B566 /* RimeKit */; };
 		A7C5D169D1DCFEDCC13927F6 /* RimeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 96B6DD883017A4F376270E90 /* RimeKit */; };
 		B24C3736E60F98C77C1F0AFF /* CicadaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454ECF797864CED6B7CD2E2D /* CicadaApp.swift */; };
@@ -50,15 +50,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		11B8973E47619C4647AC5AA3 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		11DF74913AF882BC9F3654D6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		43CF89FE7FFEFE2C8A98AD63 /* RimeServiceMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RimeServiceMain.swift; sourceTree = "<group>"; };
 		454ECF797864CED6B7CD2E2D /* CicadaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CicadaApp.swift; sourceTree = "<group>"; };
 		9C663FB13EEF5FDD127BC458 /* Cicada.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cicada.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AC1CCFB71F530031A8211587 /* RimeService.blue.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = RimeService.blue.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		AC69C6574E7CD3012188A930 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C3A41D76F925EB85D87DD558 /* RimeKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RimeKit; path = .; sourceTree = SOURCE_ROOT; };
 		CC7830CCE72F0BD7DA55603C /* RimeService.green.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = RimeService.green.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
-		E84730754EA1254B5ACF7C3F /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,14 +98,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		40FCC5573E70C682AF4A8722 /* RimeService.green */ = {
-			isa = PBXGroup;
-			children = (
-				11B8973E47619C4647AC5AA3 /* main.swift */,
-			);
-			path = RimeService.green;
-			sourceTree = "<group>";
-		};
 		57FBA0E7E939B674E1E61726 /* Cicada */ = {
 			isa = PBXGroup;
 			children = (
@@ -125,21 +116,12 @@
 			name = Packages;
 			sourceTree = "<group>";
 		};
-		7ECD16B412C4835E0ADD3860 /* RimeService.blue */ = {
-			isa = PBXGroup;
-			children = (
-				E84730754EA1254B5ACF7C3F /* main.swift */,
-			);
-			path = RimeService.blue;
-			sourceTree = "<group>";
-		};
 		BDE7D3869486DF739938B1BE = {
 			isa = PBXGroup;
 			children = (
+				43CF89FE7FFEFE2C8A98AD63 /* RimeServiceMain.swift */,
 				57FBA0E7E939B674E1E61726 /* Cicada */,
 				7AA1AE1570A37393B37CDEC2 /* Packages */,
-				7ECD16B412C4835E0ADD3860 /* RimeService.blue */,
-				40FCC5573E70C682AF4A8722 /* RimeService.green */,
 				15ECD16330D6D168583775E6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -289,7 +271,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4E43BAF720A892AAC9278361 /* main.swift in Sources */,
+				5EF8FE58877D1589CE266CBD /* RimeServiceMain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -297,7 +279,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0C1CAFD92B4046952D6F3189 /* main.swift in Sources */,
+				60530F31E956A202C6554043 /* RimeServiceMain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

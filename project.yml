@@ -17,6 +17,12 @@ targets:
     platform: macOS
     sources:
       - path: Cicada
+    dependencies:
+      - package: RimeKit
+      - target: RimeService.blue
+        embed: true
+      - target: RimeService.green
+        embed: true
     settings:
       # RimeDynamic 的 macOS slice 为浅包布局(librime-xcframework 打包形态),
       # Xcode 16 嵌入校验会拒绝;dyld 经 symlink 加载不受影响——嵌入后重整为深包。
@@ -36,19 +42,13 @@ targets:
           ln -s A "$FW/Versions/Current"
           ln -s "Versions/Current/RimeDynamic" "$FW/RimeDynamic"
           ln -s "Versions/Current/Resources" "$FW/Resources"
-    dependencies:
-      - package: RimeKit
-      - target: RimeService.blue
-        embed: true
-      - target: RimeService.green
-        embed: true
     info:
       path: Cicada/Info.plist
   RimeService.blue:
     type: xpc-service
     platform: macOS
     sources:
-      - path: RimeService.blue/main.swift
+      - path: RimeServiceMain.swift
     dependencies:
       - package: RimeKit
     info:
@@ -57,7 +57,7 @@ targets:
     type: xpc-service
     platform: macOS
     sources:
-      - path: RimeService.green/main.swift
+      - path: RimeServiceMain.swift
     dependencies:
       - package: RimeKit
     info:

@@ -12,10 +12,7 @@ let package = Package(
   products: [
     .library(
       name: "RimeKit",
-      targets: ["RimeKit"]),
-    .executable(
-      name: "RimeKitRimeService",
-      targets: ["RimeKitRimeService"])
+      targets: ["RimeKit"])
   ],
   dependencies: [
     .package(
@@ -36,9 +33,6 @@ let package = Package(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS]))
       ]),
-    .executableTarget(
-      name: "RimeKitRimeService",
-      dependencies: ["RimeKit"]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
