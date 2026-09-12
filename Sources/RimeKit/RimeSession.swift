@@ -17,6 +17,11 @@ public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
   }
 }
 
+/// Rime 会话句柄:绑定 (root, sessionID) 的进程内/远程统一外观。
+///
+/// - Warning: 句柄析构(`deinit`)会排队销毁底层会话。长会话的宿主
+///   (如输入法)应持有根 actor 直接调用会话级方法(`processKey`/
+///   `commit`/`context` 等),不要为单次调用创建短命句柄。
 public struct RimeSession: ~Copyable {
   internal let id: RimeSessionID
   internal let root: Rime
