@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # SwiftPM 依赖(Package.swift / Package.resolved)
+  - package-ecosystem: swift
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      swift-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions 工作流引用的 action
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
