@@ -13,3 +13,7 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 *.xcuserstate
 DerivedData/
+.build/
+.gitignore
+**/.build/
+**/.build/

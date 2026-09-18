@@ -6,6 +6,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Distributed
+import Foundation
 import RimeDynamic
 
 #if os(macOS)
@@ -80,6 +81,30 @@ public distributed actor Rime {
     } else {
       engineNotificationHandler = nil
     }
+  }
+
+  // MARK: 蓝绿生命周期(宿主切换协议)
+
+  /// 注意:与全部线缆方法一样,声明必须位于主定义文件内且不得包 `#if`——
+  /// `@XPCService` 宏在编译期枚举成员生成元数据白表,声明在别的文件扩展里
+  /// 或包进条件编译都会从白表缺失,线缆调用即 unknownTarget(实证)。
+
+  /// 返回服务进程 pid。宿主蓝绿切换协议:shutdown 前记下 pid,shutdown 后
+  /// 轮询其消失,以确认 userdb 锁已释放。
+  public distributed func servicePid() async throws(RimeError) -> pid_t {
+    pid_t(getpid())
+  }
+
+  /// 请求服务进程干净退出(蓝绿切换协议:宿主应先 syncUserData 落盘)。
+  ///
+  /// RPC 应答可能随进程终止而失败,调用方应容忍错误并以 servicePid 消失
+  /// 为完成标志。exit(0) 不运行 librime 级清理,但 leveldb WAL 保证重开
+  /// 一致性。
+  public distributed func shutdown() async throws(RimeError) {
+    // SwiftXPC 0.6 协作式关闭:拆除全部 peer → serviceWillShutdown 钩子 →
+    // 宿主 xpcMain 预置的 shutdownCompletion(exit(0))完成进程退役。客户端
+    // 应答随连接拆除而中断,以 pid 消失为完成标志。
+    actorSystem.requestServiceShutdown()
   }
 
   // MARK: 生命周期
@@ -579,5 +604,12 @@ public distributed actor Rime {
 }
 
 #if os(macOS)
-  extension Rime: XPCRootActor {}
+  /// 进程级单例根:`.serviceHost` 宿主系统在首个连接前预留 `.root` 身份,
+  /// 与 `shared` 首次物化的时机无关。文件作用域常量模式见 XPCRootActor 文档
+  /// (actor 自身不能以 `static let` 调 `init(actorSystem:)`)。
+  private let sharedRime = Rime(actorSystem: .serviceHost)
+
+  extension Rime: XPCRootActor {
+    public static var shared: Rime { sharedRime }
+  }
 #endif
