@@ -101,7 +101,10 @@ public distributed actor Rime {
   /// 为完成标志。exit(0) 不运行 librime 级清理,但 leveldb WAL 保证重开
   /// 一致性。
   public distributed func shutdown() async throws(RimeError) {
-    Foundation.exit(0)
+    // SwiftXPC 0.6 协作式关闭:拆除全部 peer → serviceWillShutdown 钩子 →
+    // 宿主 xpcMain 预置的 shutdownCompletion(exit(0))完成进程退役。客户端
+    // 应答随连接拆除而中断,以 pid 消失为完成标志。
+    actorSystem.requestServiceShutdown()
   }
 
   // MARK: 生命周期
@@ -601,5 +604,12 @@ public distributed actor Rime {
 }
 
 #if os(macOS)
-  extension Rime: XPCRootActor {}
+  /// 进程级单例根:`.serviceHost` 宿主系统在首个连接前预留 `.root` 身份,
+  /// 与 `shared` 首次物化的时机无关。文件作用域常量模式见 XPCRootActor 文档
+  /// (actor 自身不能以 `static let` 调 `init(actorSystem:)`)。
+  private let sharedRime = Rime(actorSystem: .serviceHost)
+
+  extension Rime: XPCRootActor {
+    public static var shared: Rime { sharedRime }
+  }
 #endif

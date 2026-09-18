@@ -19,7 +19,8 @@
     /// (蓝绿预热,§4.3):服务端不做引擎级准备——on-demand 服务的启动耗时受
     /// launchd 超时约束,部署放在服务路径之外正是蓝绿设计的核心收益。
     ///
-    /// 等价于在可执行目标中 `distributedXPCMain(Rime.self,…)`,但宿主可执行文件
+    /// 等价于在可执行目标中 `xpcMain(Rime.self, …)`(SwiftXPC 0.6 宿主
+    /// 体系),但宿主可执行文件
     /// 无需直接 import DistributedXPC。必须在主线程调用(通常位于 `@main` 的
     /// 同步入口);服务名由 launchd 配置(Info.plist 的 XPCService 声明)提供。
     ///
@@ -41,13 +42,16 @@
       onPeerEnd: (@Sendable (XPCConnection) -> Void)? = nil,
       onPeerReject: (@Sendable (XPCConnection, (any Error)?) -> Void)? = nil
     ) -> Never {
-      distributedXPCMain(
+      // SwiftXPC 0.6:宿主入口改为 XPCServiceHost 体系——xpcMain 挂根类型
+      // 与委托,协作式关闭(requestServiceShutdown)经宿主完成进程退役。
+      xpcMain(
         Rime.self,
-        peerCodeSigningRequirement: peerCodeSigningRequirement,
-        shouldAccept: shouldAccept,
-        onPeerAccept: onPeerAccept,
-        onPeerEnd: onPeerEnd,
-        onPeerReject: onPeerReject)
+        XPCServiceConfiguration(
+          peerCodeSigningRequirement: peerCodeSigningRequirement,
+          shouldAccept: shouldAccept,
+          onPeerAccept: onPeerAccept,
+          onPeerEnd: onPeerEnd,
+          onPeerReject: onPeerReject))
     }
 
     /// 连接 launchd on-demand 的 Rime XPC 服务并解析根 actor(消费侧入口)。
