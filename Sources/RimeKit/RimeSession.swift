@@ -7,7 +7,7 @@
 
 import Darwin
 import Foundation
-import RimeDynamic
+import RimeC
 
 public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
   public let rawValue: UInt

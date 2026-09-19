@@ -7,7 +7,7 @@
 
 import Distributed
 import Foundation
-import RimeDynamic
+import RimeC
 
 #if os(macOS)
   import DistributedXPC

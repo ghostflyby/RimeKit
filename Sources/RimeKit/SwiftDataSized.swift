@@ -5,7 +5,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import RimeDynamic
+import RimeC
 
 /// 零初始化的 C 结构体统一入口:首字段 `data_size` 之前的区域为元数据,
 /// 置零后才是可用载荷;keypath 测量前缀尺寸后整块清零。

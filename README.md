@@ -7,7 +7,7 @@
 - **通知订阅**:闭包输入的 `setNotificationHandler(_:)`——本地引用直接 C 注册,远程引用自动转内部 sink actor 订阅。
 - **目录布局**:`RimeDirectoryLayout` 把配置(用户可编辑)与部署(编译产物)分离,部署目录按代次(blue/green)隔离。
 - **XPC 服务**:`Rime.serveXPC()` 一行启动 launchd on-demand 服务;peer 审计与内核级代码签名校验(SwiftXPC 0.4.0)。
-- librime 以预编译二进制分发([librime-xcframework](https://github.com/ghostflyby/librime-xcframework)),构建期链接,无需本地编译 C++。
+- librime 经 [librime-xcframework](https://github.com/ghostflyby/librime-xcframework) 分发:头模块供编译,预编译二进制(动态框架/静态库)由消费方选挂,构建期链接,无需本地编译 C++。
 
 ## 系统要求
 
@@ -18,9 +18,9 @@
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/ghostflyby/RimeKit.git", from: "0.0.1"),
-  // librime 二进制分发(动态框架或静态库):
-  .package(url: "https://github.com/ghostflyby/librime-xcframework.git", from: "1.16.1-pack.8"),
+  .package(url: "https://github.com/ghostflyby/RimeKit.git", from: "0.0.6"),
+  // librime 二进制(动态框架或静态库,二选一;引入形态见下文):
+  .package(url: "https://github.com/ghostflyby/librime-xcframework.git", from: "1.17.0-pack.3"),
 ],
 targets: [
   .target(
@@ -31,6 +31,22 @@ targets: [
     ])
 ]
 ```
+
+## librime 引入形态
+
+RimeKit 只依赖 librime-xcframework 的 `Rime` 头模块(零二进制下载),librime 的
+链接与分发形态由消费方在挂载 librime-xcframework 时决定:
+
+- **bundled(动态框架)**:挂 `RimeDynamic`。SwiftPM 自动链接;默认每个链接它的
+  bundle(主 App 与各 XPC)各 embed 一份。若要**全包单副本**:App 侧 Embed & Sign,
+  XPC target 链接同一框架但 **Do Not Embed**,并给 XPC target 的
+  `LD_RUNPATH_SEARCH_PATHS` 增补 `@executable_path/../../../../Frameworks`
+  ——XPC 可执行位于 `Contents/XPCServices/<svc>.xpc/Contents/MacOS`,四级 `..`
+  指回顶层 `Contents/Frameworks`。
+- **static**:挂 `RimeStatic`,librime 静态并入宿主,无运行期查找问题。
+- **system librime(不 bundle)**:本机已安装 librime(如 brew)时不挂任何二进制
+  product,由 Xcode 工程自行链接。librime-xcframework 的 `RimeSystem` 产物亦提供
+  模块 `Rime`,与本包不可同依赖图,系统库请走 Xcode-owned linking,不经该 product。
 
 ## 用法
 
