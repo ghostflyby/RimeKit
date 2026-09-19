@@ -24,7 +24,7 @@ jobs:
         run: swift build
 
       - name: Test
-        run: swift test
+        run: swift test --serialize-scheduling
 
       - name: Create GitHub release
         env:

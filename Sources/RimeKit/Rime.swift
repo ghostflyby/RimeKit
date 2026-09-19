@@ -104,7 +104,10 @@ public distributed actor Rime {
     // SwiftXPC 0.6 协作式关闭:拆除全部 peer → serviceWillShutdown 钩子 →
     // 宿主 xpcMain 预置的 shutdownCompletion(exit(0))完成进程退役。客户端
     // 应答随连接拆除而中断,以 pid 消失为完成标志。
+    // iOS 本地系统无服务进程语义,关闭为空操作;声明保持裸露(白表按成员枚举)。
+    #if os(macOS)
     actorSystem.requestServiceShutdown()
+    #endif
   }
 
   // MARK: 生命周期

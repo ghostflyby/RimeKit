@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: swift test
-        run: swift test
+        run: swift test --serialize-scheduling
 
   # iOS 目标构建:库 + 测试目标(iOS 16 地板;generic 目的地无需模拟器设备)
   ios-build:
@@ -62,5 +62,6 @@ jobs:
           xcodebuild test \
             -scheme RimeKit \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1 | tail -40
