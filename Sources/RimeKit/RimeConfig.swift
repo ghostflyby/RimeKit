@@ -6,7 +6,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
-import RimeDynamic
+import RimeC
 
 /// `ObjectHandle` 的幽灵标记类型:仅用于在类型层面区分配置迭代器句柄,不存在实例。
 /// 保持 Copyable:线缆序列化(XPCMarshal)要求句柄类型可复制传递。

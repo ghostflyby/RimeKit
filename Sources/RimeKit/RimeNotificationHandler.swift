@@ -6,7 +6,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
-import RimeDynamic
+import RimeC
 import Synchronization
 
 public typealias RimeNotificationHandler =
@@ -22,7 +22,7 @@ final class Box: @unchecked Sendable {
 
 private func thunk(
   context: UnsafeMutableRawPointer?,
-  session: RimeDynamic.RimeSessionId,
+  session: RimeC.RimeSessionId,
   type: UnsafePointer<CChar>?,
   value: UnsafePointer<CChar>?
 ) {

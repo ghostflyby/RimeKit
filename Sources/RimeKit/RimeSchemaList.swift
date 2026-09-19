@@ -5,7 +5,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import RimeDynamic
+import RimeC
 
 public struct RimeSchemaListItem: Sendable, Codable {
   public let schemaID: String
@@ -13,7 +13,7 @@ public struct RimeSchemaListItem: Sendable, Codable {
 }
 
 extension RimeSchemaListItem {
-  fileprivate init(_ cStruct: RimeDynamic.RimeSchemaListItem) {
+  fileprivate init(_ cStruct: RimeC.RimeSchemaListItem) {
     schemaID = String(cString: cStruct.schema_id)
     name = String(cString: cStruct.name)
   }
@@ -24,7 +24,7 @@ public struct RimeSchemaList: Sendable, Codable {
 }
 
 extension RimeSchemaList {
-  fileprivate init(_ cStruct: RimeDynamic.RimeSchemaList) {
+  fileprivate init(_ cStruct: RimeC.RimeSchemaList) {
     // 空表时 librime 不分配 list 数组(nil):按空表处理,不得强解包。
     items =
       cStruct.list.map { pointer in
