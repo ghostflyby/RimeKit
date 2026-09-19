@@ -106,7 +106,7 @@ public distributed actor Rime {
     // 应答随连接拆除而中断,以 pid 消失为完成标志。
     // iOS 本地系统无服务进程语义,关闭为空操作;声明保持裸露(白表按成员枚举)。
     #if os(macOS)
-    actorSystem.requestServiceShutdown()
+      actorSystem.requestServiceShutdown()
     #endif
   }
 
