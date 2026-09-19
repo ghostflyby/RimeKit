@@ -134,9 +134,11 @@ RimeKit 经 librime-xcframework 使用 librime。product/target/模块名在两�
   可见；**链接谁、embed 谁，完全由 Xcode 工程决定**：
   - 把（自打包、install_name 为 `@rpath/...` 形态的）librime 动态库作为 **App** 的 linked framework
     并 Embed & Sign——App 的 `Contents/Frameworks/` 里出现唯一一份；
-  - 两个 XPC target **链接同一文件但 Do Not Embed**；Xcode 对 XPC 的默认 runpath
-    （`@executable_path/../Frameworks`）会解析回顶层 bundle 的那份——即"子 bundle 直接链接顶层
-    bundle 的动态库"。
+  - 两个 XPC target **链接同一文件但 Do Not Embed**。runpath 注意：XPC 的可执行位于
+    `Contents/XPCServices/<svc>.xpc/Contents/MacOS`，到顶层 `Contents/Frameworks` 需要
+    `@executable_path/../../Frameworks`——本项目 XPC 现值 `@loader_path/../Frameworks` 指向的是
+    XPC 自己的 Contents，需在 XPC target 的 `LD_RUNPATH_SEARCH_PATHS` 增补该条目，
+    "子 bundle 直接链接顶层 bundle 的动态库"即由此成立。
   - 开发期 `swift test` 需要链接解析：`LIBRARY_PATH="$(brew --prefix librime)/lib" swift test`
     （或临时 pkg-config 变体）。
 
