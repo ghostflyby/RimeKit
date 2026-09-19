@@ -14,12 +14,26 @@ let package = Package(
       name: "RimeKit",
       targets: ["RimeKit"])
   ],
+  traits: [
+    // 下游 librime 链接选型(SE-0450):消费方在 .package(traits:) 显式列出即取代
+    // 默认集(.default 不再传递),两个 trait 同开会链接期符号冲突,二选一。
+    // 消费方缺省(不写 traits)时传递 .defaults 标记 → 启用 librimeDynamic:
+    // RimeKit 的动态产品变体(Xcode 测试构建对宿主/测试共享的产品强制生成)
+    // 经 RimeDynamicStub 桩以 -framework RimeDynamic 链接(tbd,零二进制分发),
+    // 真实框架的 embed 形态由下游决定(单副本嵌入 + 子 bundle 经 runpath 解析)。
+    .default(enabledTraits: ["librimeDynamic"]),
+    .trait(name: "librimeDynamic"),
+    // librimeStatic:librime 静态并入每个链接 RimeKit 的最终产物,
+    // 下游无需另挂任何 librime 二进制。
+    .trait(name: "librimeStatic"),
+  ],
   dependencies: [
     // librime-xcframework 的 product 拆分:Rime = 纯头模块(唯一模块提供者,零二进制下载);
-    // RimeDynamic/RimeStatic = 无模块二进制(动态框架/静态库,消费方按需选挂);
-    // RimeSystem = pkg-config 系统库(模块同为 Rime,不可与本包同依赖图)。
+    // RimeDynamic/RimeStatic = 无模块二进制(动态框架/静态库);RimeDynamicStub =
+    // tbd 框架桩(只链接不嵌);RimeSystem = pkg-config 系统库(模块同为 Rime,
+    // 不可与本包同依赖图)。二进制产物进链接的通道由上方 traits 选型决定。
     .package(
-      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.4"),
+      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.7"),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
     .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.0")
@@ -32,6 +46,17 @@ let package = Package(
       name: "RimeC",
       dependencies: [
         .product(name: "Rime", package: "librime-xcframework"),
+        .product(
+          name: "RimeDynamicStub", package: "librime-xcframework",
+          condition: .when(traits: ["librimeDynamic"])),
+        .product(
+          name: "RimeStatic", package: "librime-xcframework",
+          condition: .when(traits: ["librimeStatic"])),
+      ],
+      linkerSettings: [
+        // 静态 librime 为 C++ 产物,不携带 C++ 运行时;仅在静态选型下随 RimeKit
+        // 传播 -lc++(动态选型经 RimeDynamic.framework 自带,无需此设置)。
+        .linkedLibrary("c++", .when(traits: ["librimeStatic"])),
       ]),
     .target(
       name: "RimeKit",
