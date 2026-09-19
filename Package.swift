@@ -15,10 +15,15 @@ let package = Package(
       targets: ["RimeKit"])
   ],
   dependencies: [
+    // librime 的引入形态二选一（product/target/模块名两侧一致，RimeKit 源码零改动）：
+    // 1) bundled（默认，App/XPC 自动 embed 动态库——每个含 RimeKit 的 bundle 一份）：
     .package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.2",
       // traits: [.trait(name: "dynamic")]
     ),
+    // 2) system（不 bundle：头与链接来自 pkg-config rime，App/XPC 均链接系统安装的
+    //    librime；本机 brew install librime 即可用，或经 PKG_CONFIG_PATH 指向前缀）：
+    // .package(path: "Support/librime-system"),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
     .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.0")

@@ -121,3 +121,26 @@ swift test
 
 [Mozilla Public License 2.0](LICENSE)。librime 本身为 BSD-3-Clause,其二进制
 打包的第三方归属见 [librime-xcframework 的 THIRD_PARTY_NOTICES](https://github.com/ghostflyby/librime-xcframework)。
+
+## librime 引入形态（bundled / system）
+
+RimeKit 经 librime-xcframework 使用 librime。product/target/模块名在两种形态下完全一致（`RimeDynamic`），
+因此切换只动 `Package.swift` 的依赖声明一处，RimeKit 源码零改动：
+
+- **bundled（默认）**：依赖 `librime-xcframework` 的 `RimeDynamic` 产物。SwiftPM 会在**每个**链接 RimeKit 的
+  bundle（主 App 与每个 XPC）各 embed 一份 `RimeDynamic.framework`。
+- **system（不 bundle）**：依赖本仓库 `Support/librime-system`（systemLibrary，`pkg-config rime`）。
+  头与链接来自系统安装的 librime（`brew install librime`，或用 `PKG_CONFIG_PATH` 指向自定义前缀；
+  注意系统头需含 `rime_api_stdbool.h`，本仓库已随包提供），App/XPC 运行时链接系统安装的动态库，
+  包内不再产生任何 embed 产物。注意：XPC 与主 App 需能在其 rpath 下解析到系统 librime 的安装路径
+  （brew 路径通常已在系统 rpath/LoaderPath 处理范围外时，用安装时 rpath fix-up 或安装到
+  `@loader_path` 可达位置）。
+
+切换方式：在 `Package.swift` 的 dependencies 中二选一（两行均已在文件内注释给出）：
+
+```swift
+// bundled：
+.package(url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.2"),
+// system：
+// .package(path: "Support/librime-system"),
+```
