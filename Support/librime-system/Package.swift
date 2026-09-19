@@ -14,6 +14,5 @@ let package = Package(
     targets: [
         .systemLibrary(
             name: "RimeDynamic",
-            path: "Sources/RimeDynamic",
-            pkgConfig: "rime")
+            path: "Sources/RimeDynamic")
     ])
