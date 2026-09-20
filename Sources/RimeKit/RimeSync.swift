@@ -15,7 +15,12 @@ enum RimeSync {
   ) throws -> T {
     let box = ResultBox<T>()
     let task = Task.detached(priority: .userInitiated) {
-      await box.complete(with: Result { try await operation() })
+      do {
+        let value = try await operation()
+        box.complete(with: .success(value))
+      } catch {
+        box.complete(with: .failure(error))
+      }
     }
     defer { task.cancel() }
     let seconds =
