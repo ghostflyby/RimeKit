@@ -14,11 +14,4 @@ public struct RimeElasticCandidates: Sendable {
   public let composing: Bool
   public let globalHighlight: Int
   public let pageSize: Int
-
-  init(items: [RimeCandidate], composing: Bool, globalHighlight: Int, pageSize: Int) {
-    self.items = items
-    self.composing = composing
-    self.globalHighlight = globalHighlight
-    self.pageSize = pageSize
-  }
 }

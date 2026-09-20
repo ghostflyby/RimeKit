@@ -26,6 +26,14 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 翻页事务,返回事务输出。
   func pageTransaction(_ direction: RimePageDirection) throws -> RimeKeyTransactionResult
 
+  /// 弹性取数:枚举**全量候选**(脱离引擎分页)并返回引擎高亮的全省
+  /// 下标——消费方以自身窗口(定宽、任意容量)切片展示。
+  func candidatesTransaction() throws -> RimeElasticCandidates
+
+  /// 全局下标点选(跨页自动定位),返回事务输出——弹性窗口内的词
+  /// 不在引擎当前页,须用全局下标。
+  func selectCandidateGlobalTransaction(at index: Int) throws -> RimeKeyTransactionResult
+
   /// 会话选项(librime option)。
   func setOption(_ option: String, value: Bool) throws
 
