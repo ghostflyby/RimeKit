@@ -30,6 +30,10 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 下标——消费方以自身窗口(定宽、任意容量)切片展示。
   func candidatesTransaction() throws -> RimeElasticCandidates
 
+  /// 会话失效自愈核验:底层会话是否仍存在于引擎会话表
+  /// (服务重启/引擎重初始化后旧 id 失效,消费方据此重建)。
+  func sessionExists() throws -> Bool
+
   /// 全局下标点选(跨页自动定位),返回事务输出——弹性窗口内的词
   /// 不在引擎当前页,须用全局下标。
   func selectCandidateGlobalTransaction(at index: Int) throws -> RimeKeyTransactionResult

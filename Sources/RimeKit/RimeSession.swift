@@ -75,6 +75,16 @@ public final class RimeSession: RimeSessionProtocol {
   /// 会话 ID(供重连/迁移场景重建句柄)。
   public var sessionID: RimeSessionID { id }
 
+  /// 同步失效:注册表移除 + 后台排队销毁(不等待完成)。
+  /// 供同步门面的调用方在任意上下文丢弃句柄时使用。
+  public func abort() {
+    state.markInvalidated()
+    _ = RimeSessionRegistry.retire(root: root, sessionID: id)
+    let root = root
+    let id = id
+    Task { try? await root.destroySession(with: id) }
+  }
+
   /// 协调失效:从注册表移除并**同步销毁**底层会话(返回后 findSession
   /// 必为假,rebind 不可能再获得本会话)。幂等。
   public func invalidate() async {
@@ -129,6 +139,15 @@ public final class RimeSession: RimeSessionProtocol {
   public func candidatesTransaction() throws -> RimeElasticCandidates {
     try RimeSync.perform(timeout: .seconds(10)) {
       try await self._candidatesTransaction()
+    }
+  }
+
+  /// 会话失效自愈核验(阻塞):底层会话是否仍存在于引擎会话表。
+  public func sessionExists() throws -> Bool {
+    let root = self.root
+    let id = self.id
+    return try RimeSync.perform(timeout: .seconds(10)) {
+      try await root.findSession(with: id)
     }
   }
 
