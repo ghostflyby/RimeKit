@@ -12,8 +12,7 @@ import Testing
 /// 会话表语义(参考:librime `flavored_api_test.cc` 的 create/find 会话级断言;
 /// Squirrel 每个 InputController 一会话、`find_session` 校验、退出时 `cleanup_all_sessions`)。
 ///
-/// 书写纪律:`RimeSession` 是 `~Copyable` 门面,不可被 `#expect`/`#require` 的
-/// autoclosure 捕获——所有观察值先取出为局部值,再进入断言宏。
+/// 句柄现为 final class(Sendable),含同一性规范表:同键 rebind 返回同一实例。
 @Suite(.serialized)
 struct SessionLifecycleTests {
   @Test(arguments: RimeBackend.allCases)
@@ -80,13 +79,41 @@ struct SessionLifecycleTests {
   }
 
   @Test(arguments: RimeBackend.allCases)
-  func facadeRejectsUnknownSessionID(backend: RimeBackend) async throws {
+  func rebindReturnsNilForUnknownSessionID(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let ghost = RimeSessionID(rawValue: 0xDEAD_BEEF)
-    let restored = try await RimeSession(root: env.root, sessionID: ghost)
-    if restored != nil {
-      Issue.record("未知会话不应可绑定门面")
+    let restored = try await RimeSession.rebind(root: env.root, sessionID: ghost)
+    #expect(restored == nil)
+  }
+
+  @Test(arguments: RimeBackend.allCases)
+  func rebindReturnsCanonicalInstanceForLiveSession(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    let rebound = try await RimeSession.rebind(root: env.root, sessionID: session.sessionID)
+    // 同键存活句柄:返回同一规范实例,而非新建包装(别名在结构上不可能)。
+    #expect(rebound != nil)
+    #expect(rebound === session)
+  }
+
+  @Test(arguments: RimeBackend.allCases)
+  func handleReleaseDestroysSessionAndRebindYieldsNil(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let sessionID = try await env.root.createSession()
+    var handle: RimeSession? = try await RimeSession.rebind(
+      root: env.root, sessionID: sessionID)
+    #expect(handle != nil)
+    handle = nil  // 最后强引用释放 → deinit 排队销毁底层会话
+    // 销毁经 Task 异步入队:轮询等待会话消失(有界)。
+    var gone = false
+    for _ in 0..<100 {
+      try await Task.sleep(for: .milliseconds(10))
+      gone = try await !env.root.findSession(with: sessionID)
+      if gone { break }
     }
+    #expect(gone)
+    let rebound = try await RimeSession.rebind(root: env.root, sessionID: sessionID)
+    #expect(rebound == nil)
   }
 
   @Test(
