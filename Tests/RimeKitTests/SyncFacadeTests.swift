@@ -60,7 +60,8 @@ struct SyncFacadeTests {
     // 手动占门制造卡死:短时限事务应抛 timedOut。
     await session.gate.acquire()
     #expect(throws: RimeSessionError.self) {
-      try session.keyTransaction(keyCode: Key.ascii("a"), modifierMask: 0, timeout: .milliseconds(80))
+      try session.keyTransaction(
+        keyCode: Key.ascii("a"), modifierMask: 0, timeout: .milliseconds(80))
     }
     session.gate.release()
     // 释放后事务恢复可用(被弃操作完成后门已可复用;此处直接验证可达)。

@@ -17,10 +17,4 @@ public struct RimeKeyTransactionResult: Sendable {
   /// 组字快照(仅组字态非 nil)。
   public let context: RimeContext?
 
-  init(handled: Bool, commit: RimeCommit?, composing: Bool, context: RimeContext?) {
-    self.handled = handled
-    self.commit = commit
-    self.composing = composing
-    self.context = context
-  }
 }
