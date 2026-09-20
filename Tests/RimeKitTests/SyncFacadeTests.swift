@@ -84,4 +84,36 @@ struct SyncFacadeTests {
     let rebound = try await RimeSession.rebind(root: env.root, sessionID: session.sessionID)
     #expect(rebound == nil)
   }
+
+  @Test(arguments: RimeBackend.allCases)
+  func candidatesTransactionSpansEnginePages(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    for char in "nihao" {
+      _ = try session.keyTransaction(keyCode: Key.ascii(char), modifierMask: 0)
+    }
+    let elastic = try session.candidatesTransaction()
+    // 全量候选(脱离引擎分页):非空且覆盖引擎高亮的全省位置。
+    #expect(elastic.composing)
+    #expect(!elastic.items.isEmpty)
+    let page = try await session.context()?.menu
+    let global = Int(page!.pageNumber) * Int(page!.pageSize) + Int(page!.highlightedCandidateIndex)
+    #expect(elastic.globalHighlight == global)
+    #expect(elastic.globalHighlight < elastic.items.count)
+  }
+
+  @Test(arguments: RimeBackend.allCases)
+  func selectCandidateGlobalTransactionSelectsAcrossPages(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    for char in "nihao" {
+      _ = try session.keyTransaction(keyCode: Key.ascii(char), modifierMask: 0)
+    }
+    let elastic = try session.candidatesTransaction()
+    // 选最后一个候选(可能在引擎当前页界之外)
+    let lastIndex = elastic.items.count - 1
+    let result = try session.selectCandidateGlobalTransaction(at: lastIndex)
+    #expect(result.handled)
+    #expect(result.commit != nil)  // 候选选中即上屏
+  }
 }

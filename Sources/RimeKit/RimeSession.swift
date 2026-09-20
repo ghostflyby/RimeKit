@@ -126,6 +126,20 @@ public final class RimeSession: RimeSessionProtocol {
     }
   }
 
+  public func candidatesTransaction() throws -> RimeElasticCandidates {
+    try RimeSync.perform(timeout: .seconds(10)) {
+      try await self._candidatesTransaction()
+    }
+  }
+
+  public func selectCandidateGlobalTransaction(at index: Int) throws
+    -> RimeKeyTransactionResult
+  {
+    try RimeSync.perform(timeout: .seconds(10)) {
+      try await self._selectCandidateGlobalTransaction(at: index)
+    }
+  }
+
   public func setOption(_ option: String, value: Bool) throws {
     let root = self.root
     let id = self.id
@@ -161,6 +175,34 @@ public final class RimeSession: RimeSessionProtocol {
     try await beginTransaction()
     defer { gate.release() }
     let handled = try await root.selectCandidateOnCurrentPage(at: index, for: id)
+    return try await assembleOutcome(handled: handled)
+  }
+
+  func _candidatesTransaction() async throws -> RimeElasticCandidates {
+    try await beginTransaction()
+    defer { gate.release() }
+    var items: [RimeCandidate] = []
+    for try await candidate in candidates {
+      items.append(candidate)
+    }
+    let composing = try await root.status(for: id)?.isComposing ?? false
+    let context = try await root.context(for: id)
+    let menu = context?.menu
+    let global =
+      menu.map { Int($0.pageNumber) * Int($0.pageSize) + Int($0.highlightedCandidateIndex) } ?? 0
+    return RimeElasticCandidates(
+      items: items,
+      composing: composing,
+      globalHighlight: composing ? global : 0,
+      pageSize: menu.map { Int($0.pageSize) } ?? 0)
+  }
+
+  func _selectCandidateGlobalTransaction(at index: Int) async throws
+    -> RimeKeyTransactionResult
+  {
+    try await beginTransaction()
+    defer { gate.release() }
+    let handled = try await root.selectCandidate(at: index, for: id)
     return try await assembleOutcome(handled: handled)
   }
 
