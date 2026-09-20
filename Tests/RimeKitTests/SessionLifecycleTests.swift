@@ -97,23 +97,19 @@ struct SessionLifecycleTests {
   }
 
   @Test(arguments: RimeBackend.allCases)
-  func handleReleaseDestroysSessionAndRebindYieldsNil(backend: RimeBackend) async throws {
+  func handleReleaseDoesNotDestroySession(backend: RimeBackend) async throws {
+    // 所有权在注册表(强持有):释放消费方引用不影响会话;
+    // 销毁只经 invalidate()/destroy() 协调发生。
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let sessionID = try await env.root.createSession()
     var handle: RimeSession? = try await RimeSession.rebind(
       root: env.root, sessionID: sessionID)
     #expect(handle != nil)
-    handle = nil  // 最后强引用释放 → deinit 排队销毁底层会话
-    // 销毁经 Task 异步入队:轮询等待会话消失(有界)。
-    var gone = false
-    for _ in 0..<100 {
-      try await Task.sleep(for: .milliseconds(10))
-      gone = try await !env.root.findSession(with: sessionID)
-      if gone { break }
-    }
-    #expect(gone)
+    handle = nil
+    let found = try await env.root.findSession(with: sessionID)
+    #expect(found == true)
     let rebound = try await RimeSession.rebind(root: env.root, sessionID: sessionID)
-    #expect(rebound == nil)
+    #expect(rebound != nil)  // 注册表规范实例仍可取出
   }
 
   @Test(
