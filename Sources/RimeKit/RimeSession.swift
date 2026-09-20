@@ -17,17 +17,18 @@ public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
   }
 }
 
-/// Rime 会话句柄:绑定 (root, sessionID) 的进程内/远程统一外观。
+/// Rime 会话句柄:绑定 (root, sessionID) 的可长期持有外观。
 ///
-/// - Warning: 句柄析构(`deinit`)会排队销毁底层会话。长会话的宿主
-///   (如输入法)应持有根 actor 直接调用会话级方法(`processKey`/
-///   `commit`/`context` 等),不要为单次调用创建短命句柄。
-public struct RimeSession: ~Copyable {
+/// class 语义:可存入 actor 属性、协议存在类型与 `@Sendable` 闭包,供输入法
+/// 宿主**长期持有**(每输入会话一个句柄,随宿主生命周期)。引用计数归零时
+/// 排队销毁底层会话;`destroy()` 供提前显式销毁——两者同一通道且幂等
+/// (librime 对已销毁会话返回 false)。短命用法(单次调用即弃)同样成立。
+public final class RimeSession: Sendable {
   internal let id: RimeSessionID
   internal let root: Rime
 
   /// 进程内公开工厂:绑定共享引擎(iOS/进程内路径的公开入口)。
-  public init() async throws {
+  public convenience init() async throws {
     try await self.init(root: .localShared)
   }
 
@@ -52,6 +53,11 @@ public struct RimeSession: ~Copyable {
 
   /// 会话 ID(供重连/迁移场景重建句柄)。
   public var sessionID: RimeSessionID { id }
+
+  /// 显式销毁底层会话(与析构销毁同通道,幂等)。
+  public func destroy() async {
+    _ = try? await root.destroySession(with: id)
+  }
 }
 
 extension RimeSession {
@@ -157,5 +163,22 @@ extension RimeSession {
   }
   public func set(caretPosition: Int) async throws {
     try await root.set(caretPosition: caretPosition, for: sessionID)
+  }
+}
+
+extension RimeSession {
+  /// 提交当前候选(全局下标;跨页自动定位)。
+  public func commit() async throws -> RimeCommit? {
+    try await root.commit(for: sessionID)
+  }
+
+  /// 组字/候选快照(当前引擎页)。
+  public func context() async throws -> RimeContext? {
+    try await root.context(for: sessionID)
+  }
+
+  /// 会话状态(isComposing 等)。
+  public func status() async throws -> RimeStatus? {
+    try await root.status(for: sessionID)
   }
 }
