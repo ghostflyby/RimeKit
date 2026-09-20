@@ -17,19 +17,21 @@ public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
   }
 }
 
-/// Rime 会话句柄:绑定 (root, sessionID) 的可长期持有外观。
+/// Rime 会话:绑定 (root, sessionID) 的**同步门面**,输入法宿主的直接对接面。
 ///
-/// class 语义:可存入 actor 属性、协议存在类型与 `@Sendable` 闭包,供输入法
-/// 宿主**长期持有**(每输入会话一个句柄,随宿主生命周期)。引用计数归零时
-/// 排队销毁底层会话;`destroy()` 供提前显式销毁——两者同一通道且幂等
-/// (librime 对已销毁会话返回 false)。短命用法(单次调用即弃)同样成立。
+/// 所有权归注册表(强持有,镜像 librime 会话表):消费方可自由持引用,
+/// 销毁只经 `invalidate()` 协调发生(蓝绿切换/重连/显式销毁);失效后
+/// 一切事务抛 `RimeSessionError.invalidated`,消费方按当前活跃根重建。
+/// 事务经内部 FIFO 门串行:多调用分组(如按键事务)对其他事务不可见。
 ///
-/// **同一性规范**(弱引用注册表):同一 `(root, id)` 至多存在一个存活
-/// 句柄实例,全部构造路径经 `RimeSessionRegistry` 收敛——别名(两个
-/// 句柄包同一会话,一方丢弃连带销毁另一方)在结构上不可能。
-public final class RimeSession: Sendable {
+/// 同步方法为阻塞包装,阻塞落在调用方线程(输入法回调线程,其同步契约
+/// 本就要求等待);协作线程池仅挂起不占线程。超时默认 10s,超时抛
+/// `timedOut` 而内部操作继续。跨进程的只有根 actor;本类型保持本地。
+public final class RimeSession: RimeSessionProtocol {
   internal let id: RimeSessionID
   internal let root: Rime
+  let gate = RimeSessionGate()  // internal:@testable 供超时测试占门
+  private let state = InvalidatedFlag()
 
   /// 进程内公开工厂:绑定共享引擎(iOS/进程内路径的公开入口)。
   public convenience init() async throws {
@@ -64,18 +66,141 @@ public final class RimeSession: Sendable {
     return RimeSession(claiming: root, sessionID: sessionID)
   }
 
-  deinit {
-    let root = root
-    let id = id
-    Task { try? await root.destroySession(with: id) }
-  }
-
   /// 会话 ID(供重连/迁移场景重建句柄)。
   public var sessionID: RimeSessionID { id }
 
-  /// 显式销毁底层会话(与析构销毁同通道,幂等)。
-  public func destroy() async {
+  /// 协调失效:从注册表移除并**同步销毁**底层会话(返回后 findSession
+  /// 必为假,rebind 不可能再获得本会话)。幂等。
+  public func invalidate() async {
+    state.markInvalidated()
+    _ = RimeSessionRegistry.retire(root: root, sessionID: id)
     _ = try? await root.destroySession(with: id)
+  }
+
+  /// 显式销毁(invalidate 加即时 destroy,保留直白命名)。
+  public func destroy() async {
+    await invalidate()
+  }
+
+  // MARK: - 同步门面(RimeSessionProtocol)
+
+  public func keyTransaction(keyCode: Int32, modifierMask: Int32) throws
+    -> RimeKeyTransactionResult
+  {
+    try keyTransaction(keyCode: keyCode, modifierMask: modifierMask, timeout: .seconds(10))
+  }
+
+  public func keyTransaction(
+    keyCode: Int32, modifierMask: Int32, timeout: Duration
+  ) throws -> RimeKeyTransactionResult {
+    try RimeSync.perform(timeout: timeout) {
+      try await self._keyTransaction(keyCode: keyCode, modifierMask: modifierMask)
+    }
+  }
+
+  public func blurTransaction() throws -> RimeCommit? {
+    try RimeSync.perform(timeout: .seconds(10)) {
+      try await self._blurTransaction()
+    }
+  }
+
+  public func selectCandidateTransaction(onCurrentPage index: Int) throws
+    -> RimeKeyTransactionResult
+  {
+    try RimeSync.perform(timeout: .seconds(10)) {
+      try await self._selectCandidateTransaction(onCurrentPage: index)
+    }
+  }
+
+  public func pageTransaction(_ direction: RimePageDirection) throws
+    -> RimeKeyTransactionResult
+  {
+    try RimeSync.perform(timeout: .seconds(10)) {
+      try await self._pageTransaction(direction)
+    }
+  }
+
+  public func setOption(_ option: String, value: Bool) throws {
+    let root = self.root
+    let id = self.id
+    try RimeSync.perform(timeout: .seconds(10)) {
+      try await root.setOption(option, value: value, for: id)
+    }
+  }
+
+  // MARK: - 门控事务核(async;同步包装的唯一实现路径)
+
+  func _keyTransaction(keyCode: Int32, modifierMask: Int32) async throws
+    -> RimeKeyTransactionResult
+  {
+    try await beginTransaction()
+    defer { gate.release() }
+    let handled = try await root.processKey(
+      keyCode: keyCode, modifierMask: modifierMask, for: id)
+    return try await assembleOutcome(handled: handled)
+  }
+
+  func _blurTransaction() async throws -> RimeCommit? {
+    try await beginTransaction()
+    defer { gate.release() }
+    let composing = try await root.status(for: id)?.isComposing ?? false
+    guard composing else { return nil }  // 非组字态无副作用
+    _ = try await root.commitComposition(for: id)
+    return try await root.commit(for: id)
+  }
+
+  func _selectCandidateTransaction(onCurrentPage index: Int) async throws
+    -> RimeKeyTransactionResult
+  {
+    try await beginTransaction()
+    defer { gate.release() }
+    let handled = try await root.selectCandidateOnCurrentPage(at: index, for: id)
+    return try await assembleOutcome(handled: handled)
+  }
+
+  func _pageTransaction(_ direction: RimePageDirection) async throws
+    -> RimeKeyTransactionResult
+  {
+    try await beginTransaction()
+    defer { gate.release() }
+    let handled = try await root.page(direction, for: id)
+    return try await assembleOutcome(handled: handled)
+  }
+
+  /// 入门 + 失效检查(检查在门内进行,与 invalidate 串行)。
+  private func beginTransaction() async throws {
+    await gate.acquire()
+    guard !state.isInvalidated else {
+      gate.release()
+      throw RimeSessionError.invalidated
+    }
+  }
+
+  /// 事务尾部组装:提交文本 + 组字态 + 组字快照。
+  private func assembleOutcome(handled: Bool) async throws -> RimeKeyTransactionResult {
+    let commit = try await root.commit(for: id)
+    let composing = try await root.status(for: id)?.isComposing ?? false
+    let context = composing ? try await root.context(for: id) : nil
+    return RimeKeyTransactionResult(
+      handled: handled, commit: commit, composing: composing, context: context)
+  }
+}
+
+/// 失效标记(NSLock 而非 Mutex:与包内其他同步原语的地板对齐)。
+final class InvalidatedFlag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value = false
+
+  func markInvalidated() {
+    lock.lock()
+    value = true
+    lock.unlock()
+  }
+
+  var isInvalidated: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return value
   }
 }
 
@@ -202,41 +327,40 @@ extension RimeSession {
   }
 }
 
-/// 会话句柄同一性规范表:同一 `(root, id)` 至多一个存活句柄实例,
-/// 全部构造路径经此收敛——别名(两个句柄包同一会话,一方丢弃连带
-/// 销毁另一方)在结构上不可能。表持**弱引用**,持有者全部消亡时条目
-/// 自动蒸发(销毁由句柄 deinit 常规触发);键含根身份:双代(blue/green)
-/// 各自独立进程/代理,id 空间互不可见。
+/// 会话句柄同一性规范表:**注册表强持有**(镜像 librime 会话表——
+/// 所有权归表,销毁只经协调路径 `invalidate`/`retire` 发生),同一
+/// `(root, id)` 至多一个存活句柄实例,别名在结构上不可能。键含根身份:
+/// 双代(blue/green)各自独立进程/代理,id 空间互不可见。
 enum RimeSessionRegistry {
-  private final class Weak {
-    weak var value: RimeSession?
-    init(_ value: RimeSession) { self.value = value }
-  }
-
   /// NSLock 而非 Mutex:可用性地板与包地板对齐(见 RimeGlobalNotificationHook)。
   private final class State: @unchecked Sendable {
     let lock = NSLock()
-    var table: [ObjectIdentifier: [RimeSessionID: Weak]] = [:]
+    var table: [ObjectIdentifier: [RimeSessionID: RimeSession]] = [:]
 
     func lookup(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
       lock.lock()
       defer { lock.unlock() }
-      let key = ObjectIdentifier(root)
-      guard var sessions = table[key], let weak = sessions[sessionID] else { return nil }
-      if let value = weak.value { return value }
-      sessions[sessionID] = nil
-      if sessions.isEmpty {
-        table[key] = nil
-      } else {
-        table[key] = sessions
-      }
-      return nil
+      return table[ObjectIdentifier(root)]?[sessionID]
     }
 
     func register(root: Rime, session: RimeSession) {
       lock.lock()
       defer { lock.unlock() }
-      table[ObjectIdentifier(root), default: [:]][session.id] = Weak(session)
+      table[ObjectIdentifier(root), default: [:]][session.id] = session
+    }
+
+    func retire(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
+      lock.lock()
+      defer { lock.unlock() }
+      let key = ObjectIdentifier(root)
+      guard var sessions = table[key], let removed = sessions.removeValue(forKey: sessionID)
+      else { return nil }
+      if sessions.isEmpty {
+        table[key] = nil
+      } else {
+        table[key] = sessions
+      }
+      return removed
     }
   }
 
@@ -248,5 +372,9 @@ enum RimeSessionRegistry {
 
   static func register(root: Rime, session: RimeSession) {
     state.register(root: root, session: session)
+  }
+
+  static func retire(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
+    state.retire(root: root, sessionID: sessionID)
   }
 }
