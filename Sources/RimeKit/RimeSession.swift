@@ -54,6 +54,12 @@ public final class RimeSession: RimeSessionProtocol {
     RimeSessionRegistry.register(root: root, session: self)
   }
 
+  /// 同步工厂:新建会话并注册(阻塞一次 createSession 往返)。
+  /// 输入法回调等同步上下文按当前活跃根建会话的入口。
+  public static func create(root: Rime, timeout: Duration = .seconds(10)) throws -> RimeSession {
+    try RimeSync.perform(timeout: timeout) { try await RimeSession(root: root) }
+  }
+
   /// 重绑既有会话:同键存活句柄存在时**直接返回规范实例**;否则经
   /// findSession 校验后新建(校验失败返回 nil,调用方可重建会话)。
   public static func rebind(
