@@ -32,8 +32,12 @@ let package = Package(
     // RimeDynamic/RimeStatic = 无模块二进制(动态框架/静态库);RimeDynamicStub =
     // tbd 框架桩(只链接不嵌);RimeSystem = pkg-config 系统库(模块同为 Rime,
     // 不可与本包同依赖图)。二进制产物进链接的通道由上方 traits 选型决定。
+    // librime 引入形态二选一(product/target/模块名两侧一致,RimeKit 源码零改动):
+    // bundled(默认)在下方;system(不 bundle,纯模块声明,链接与 embed 由 Xcode
+    // 工程自管)切换为下一行,详见 README「librime 引入形态」。
     .package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.0.1"),
+    // .package(path: "Support/librime-system"),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
     .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.0")

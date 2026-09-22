@@ -142,3 +142,32 @@ swift test
 
 [Mozilla Public License 2.0](LICENSE)。librime 本身为 BSD-3-Clause,其二进制
 打包的第三方归属见 [librime-xcframework 的 THIRD_PARTY_NOTICES](https://github.com/ghostflyby/librime-xcframework)。
+
+## librime 引入形态（bundled / system）
+
+RimeKit 经 librime-xcframework 使用 librime。product/target/模块名在两种形态下完全一致（`RimeDynamic`），
+因此切换只动 `Package.swift` 的依赖声明一处，RimeKit 源码零改动：
+
+- **bundled（默认）**：依赖 `librime-xcframework` 的 `RimeDynamic` 产物。SwiftPM 会在**每个**链接 RimeKit 的
+  bundle（主 App 与每个 XPC）各 embed 一份 `RimeDynamic.framework`。
+- **system（不 bundle）**：依赖本仓库 `Support/librime-system`——一个**纯模块声明**（vendor 的
+  librime 公共头 + modulemap，**无 pkg-config、无任何链接设置**）。SwiftPM 侧只保证 `import RimeDynamic`
+  可见；**链接谁、embed 谁，完全由 Xcode 工程决定**：
+  - 把（自打包、install_name 为 `@rpath/...` 形态的）librime 动态库作为 **App** 的 linked framework
+    并 Embed & Sign——App 的 `Contents/Frameworks/` 里出现唯一一份；
+  - 两个 XPC target **链接同一文件但 Do Not Embed**。runpath 注意：XPC 的可执行位于
+    `Contents/XPCServices/<svc>.xpc/Contents/MacOS`，到顶层 `Contents/Frameworks` 需要
+    `@executable_path/../../Frameworks`——本项目 XPC 现值 `@loader_path/../Frameworks` 指向的是
+    XPC 自己的 Contents，需在 XPC target 的 `LD_RUNPATH_SEARCH_PATHS` 增补该条目，
+    "子 bundle 直接链接顶层 bundle 的动态库"即由此成立。
+  - 开发期 `swift test` 需要链接解析：`LIBRARY_PATH="$(brew --prefix librime)/lib" swift test`
+    （或临时 pkg-config 变体）。
+
+切换方式：在 `Package.swift` 的 dependencies 中二选一（两行均已在文件内注释给出）：
+
+```swift
+// bundled：
+.package(url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.2"),
+// system：
+// .package(path: "Support/librime-system"),
+```
