@@ -87,7 +87,7 @@ public struct RimeMenu: Sendable, Codable {
 }
 
 extension RimeMenu {
-  fileprivate init(_ cStruct: RimeC.RimeMenu_stdbool) {
+  fileprivate init(_ cStruct: RimeC.RimeMenu) {
     pageSize = cStruct.page_size
     pageNumber = cStruct.page_no
     isLastPage = cStruct.is_last_page
