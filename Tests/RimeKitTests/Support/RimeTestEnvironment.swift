@@ -6,7 +6,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
-import RimeDynamic
+import RimeC
 
 @testable import RimeKit
 
@@ -97,7 +97,7 @@ final class RimeNotificationLog: Sendable {
     let box = Box(log)
     // 进程生命周期内存活(与 librime 回调注册同寿),有意不释放。
     let context = Unmanaged.passRetained(box).toOpaque()
-    rime_get_api_stdbool().pointee.set_notification_handler(
+    rime_get_api().pointee.set_notification_handler(
       { context, session, type, value in
         guard let context, let type, let value else { return }
         let box = Unmanaged<Box>.fromOpaque(context).takeUnretainedValue()

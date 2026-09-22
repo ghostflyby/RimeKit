@@ -6,7 +6,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
-import RimeDynamic
+import RimeC
 import Synchronization
 
 public typealias RimeNotificationHandler =
@@ -22,7 +22,7 @@ final class Box: @unchecked Sendable {
 
 private func thunk(
   context: UnsafeMutableRawPointer?,
-  session: RimeDynamic.RimeSessionId,
+  session: RimeC.RimeSessionId,
   type: UnsafePointer<CChar>?,
   value: UnsafePointer<CChar>?
 ) {
@@ -81,11 +81,11 @@ enum RimeGlobalNotificationHook {
     let box = Box(handler)
     let context = Unmanaged.passUnretained(box).toOpaque()
     state.swap(in: box)
-    rime_get_api_stdbool().pointee.set_notification_handler(thunk, context)
+    rime_get_api().pointee.set_notification_handler(thunk, context)
   }
 
   static func clear() {
-    rime_get_api_stdbool().pointee.set_notification_handler(nil, nil)
+    rime_get_api().pointee.set_notification_handler(nil, nil)
   }
 }
 

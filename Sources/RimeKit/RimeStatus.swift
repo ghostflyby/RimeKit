@@ -5,7 +5,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import RimeDynamic
+import RimeC
 
 public struct RimeStatus: Sendable, Codable {
   public let schemaID: String
@@ -20,7 +20,7 @@ public struct RimeStatus: Sendable, Codable {
 }
 
 extension RimeStatus {
-  fileprivate init(rawValue: rime_status_t_stdbool) {
+  fileprivate init(rawValue: rime_status_t) {
     schemaID = String(cString: rawValue.schema_id)
     schemaName = String(cString: rawValue.schema_name)
     isDisabled = rawValue.is_disabled
@@ -43,7 +43,7 @@ extension RimeSession {
 
 extension Rime {
   func engineStatus(for sessionID: RimeSessionID) throws(RimeError) -> RimeStatus? {
-    var status = rime_status_t_stdbool.rimeStructInit()
+    var status = rime_status_t.rimeStructInit()
     defer { _ = rimeApi.free_status(&status) }
     guard rimeApi.get_status(sessionID.rawValue, &status) else {
       return nil

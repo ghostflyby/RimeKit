@@ -6,9 +6,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
-import RimeDynamic
+import RimeC
 
-typealias RimeContextRaw = RimeDynamic.rime_context_t_stdbool
+typealias RimeContextRaw = RimeC.rime_context_t
 
 public struct RimeContext: Sendable, Codable {
   public let composition: RimeComposition
@@ -56,7 +56,7 @@ public struct RimeComposition: Sendable, Codable {
 }
 
 extension RimeComposition {
-  fileprivate init(_ cStruct: RimeDynamic.RimeComposition) {
+  fileprivate init(_ cStruct: RimeC.RimeComposition) {
     length = cStruct.length
     cursorPosition = cStruct.cursor_pos
     selectionStart = cStruct.sel_start
@@ -71,7 +71,7 @@ public struct RimeCandidate: Sendable, Codable {
 }
 
 extension RimeCandidate {
-  fileprivate init(_ cStruct: RimeDynamic.RimeCandidate) {
+  fileprivate init(_ cStruct: RimeC.RimeCandidate) {
     text = cStruct.text.map { String(cString: $0) } ?? ""
     comment = cStruct.comment.map { String(cString: $0) } ?? ""
   }
@@ -87,7 +87,7 @@ public struct RimeMenu: Sendable, Codable {
 }
 
 extension RimeMenu {
-  fileprivate init(_ cStruct: RimeDynamic.RimeMenu_stdbool) {
+  fileprivate init(_ cStruct: RimeC.RimeMenu) {
     pageSize = cStruct.page_size
     pageNumber = cStruct.page_no
     isLastPage = cStruct.is_last_page

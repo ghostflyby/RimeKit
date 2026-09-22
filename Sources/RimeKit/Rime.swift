@@ -7,7 +7,7 @@
 
 import Distributed
 import Foundation
-import RimeDynamic
+import RimeC
 
 #if os(macOS)
   import DistributedXPC
@@ -45,7 +45,7 @@ public distributed actor Rime {
     internal static let localShared = Rime(actorSystem: RimeLocalSystem())
   #endif
 
-  internal let rimeApi: RimeApi_stdbool
+  internal let rimeApi: RimeApi
   internal var opaque: Box?
   internal static let cStringBufferSize = 1024
   internal let cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
@@ -56,7 +56,7 @@ public distributed actor Rime {
 
   public init(actorSystem: ActorSystem) {
     self.actorSystem = actorSystem
-    self.rimeApi = rime_get_api_stdbool().pointee
+    self.rimeApi = rime_get_api().pointee
   }
 
   // MARK: 运维面(不进 `Rime` 协议)

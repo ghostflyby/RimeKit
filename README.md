@@ -7,7 +7,7 @@
 - **通知订阅**:闭包输入的 `setNotificationHandler(_:)`——本地引用直接 C 注册,远程引用自动转内部 sink actor 订阅。
 - **目录布局**:`RimeDirectoryLayout` 把配置(用户可编辑)与部署(编译产物)分离,部署目录按代次(blue/green)隔离。
 - **XPC 服务**:`Rime.serveXPC()` 一行启动 launchd on-demand 服务;peer 审计与内核级代码签名校验(SwiftXPC 0.4.0)。
-- librime 以预编译二进制分发([librime-xcframework](https://github.com/ghostflyby/librime-xcframework)),构建期链接,无需本地编译 C++。
+- librime 经 [librime-xcframework](https://github.com/ghostflyby/librime-xcframework) 分发:头模块供编译,动态/静态二进制的链接经 traits(SE-0450)由下游选型,构建期链接,无需本地编译 C++。
 
 ## 系统要求
 
@@ -18,9 +18,9 @@
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/ghostflyby/RimeKit.git", from: "0.0.1"),
-  // librime 二进制分发(动态框架或静态库):
-  .package(url: "https://github.com/ghostflyby/librime-xcframework.git", from: "1.16.1-pack.8"),
+  .package(url: "https://github.com/ghostflyby/RimeKit.git", from: "0.0.7"),
+  // librime 二进制分发包(动态选型下 App target 声明 RimeDynamic 供嵌入;见下文):
+  .package(url: "https://github.com/ghostflyby/librime-xcframework.git", from: "1.17.0-pack.7"),
 ],
 targets: [
   .target(
@@ -31,6 +31,27 @@ targets: [
     ])
 ]
 ```
+
+## librime 引入形态(traits 选型)
+
+librime 的**链接通道由 RimeKit 的 traits 决定**(SE-0450),下游在 `.package(traits:)`
+中二选一;缺省等价于 `librimeDynamic`:
+
+- **`librimeDynamic`(默认)**:RimeKit 的动态产品变体(Xcode 测试构建对宿主/测试
+  共享的产品强制生成)经 `RimeDynamicStub` 桩以 `-framework RimeDynamic` 链接
+  (tbd,只链接零分发)。App target 声明 `RimeDynamic` 供**嵌入**;SwiftPM 会把
+  动态产品嵌入每个声明它的 bundle——若要**全包单副本**:仅 App 声明 `RimeDynamic`,
+  XPC/测试 target 什么都不用挂,并给 XPC target 的 `LD_RUNPATH_SEARCH_PATHS`
+  增补 `@executable_path/../../../../Frameworks`——XPC 可执行位于
+  `Contents/XPCServices/<svc>.xpc/Contents/MacOS`,四级 `..` 指回顶层
+  `Contents/Frameworks`。
+- **`librimeStatic`**:librime(含依赖)静态并入每个链接 RimeKit 的最终产物,
+  无需 embed 任何框架、无运行期查找;C++ 运行时由 RimeKit 一并传播 `-lc++`。
+  消费方写法:`.package(url: "…/RimeKit.git", from: "0.0.7", traits: ["librimeStatic"])`
+  (显式列出即取代默认集,两个 trait 同开会链接期符号冲突)。
+- **system librime(不 bundle)**:本机已安装 librime(如 brew)时,可基于
+  librime-xcframework 的 `RimeSystem` 产物(pkg-config)自建引入;该产物亦提供
+  模块 `Rime`,与 `Rime` 头模块不可同依赖图。
 
 ## 用法
 
