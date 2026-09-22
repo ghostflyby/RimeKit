@@ -81,11 +81,11 @@ enum RimeGlobalNotificationHook {
     let box = Box(handler)
     let context = Unmanaged.passUnretained(box).toOpaque()
     state.swap(in: box)
-    rime_get_api_stdbool().pointee.set_notification_handler(thunk, context)
+    rime_get_api().pointee.set_notification_handler(thunk, context)
   }
 
   static func clear() {
-    rime_get_api_stdbool().pointee.set_notification_handler(nil, nil)
+    rime_get_api().pointee.set_notification_handler(nil, nil)
   }
 }
 
