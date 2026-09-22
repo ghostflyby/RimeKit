@@ -8,7 +8,7 @@
 import Foundation
 import RimeC
 
-typealias RimeContextRaw = RimeC.rime_context_t_stdbool
+typealias RimeContextRaw = RimeC.rime_context_t
 
 public struct RimeContext: Sendable, Codable {
   public let composition: RimeComposition
