@@ -59,7 +59,7 @@ extension CDataSized {
       raw.bindMemory(to: UInt8.self).update(repeating: 0)
     }
 
-    let prefixSize = MemoryLayout.size(ofValue: \Self.dataSize)
+    let prefixSize = MemoryLayout.size(ofValue: value.dataSize)
     value.dataSize = Int32(MemoryLayout<Self>.size - prefixSize)
     return value
   }
