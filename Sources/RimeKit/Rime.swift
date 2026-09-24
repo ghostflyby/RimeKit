@@ -113,6 +113,7 @@ public distributed actor Rime {
   // MARK: 生命周期
 
   public distributed func setup(with traits: RimeTraits) async throws(RimeError) {
+    // 日志配置由下游决定(RimeLogSink.install 等);setup 保持中性。
     var t = rime_traits_t.rimeStructInit()
     let handle = traits.toCStructure(&t)
     rimeApi.setup(&t)
@@ -576,6 +577,87 @@ public distributed actor Rime {
     async throws(RimeError) -> Bool
   {
     try enginePage(direction, for: session)
+  }
+
+  // MARK: - 业务事务(服务端组装:一次往返返回业务结果)
+
+  /// 按键事务:processKey + 提交/组字快照一次往返组装(原客户端
+  /// assembleOutcome 的组装逻辑上移至此)。
+  public distributed func keyTransaction(
+    keyCode: Int32, modifierMask: Int32, for session: RimeSessionID
+  ) async throws(RimeError) -> RimeKeyTransactionResult {
+    let handled = try engineProcessKey(
+      keyCode: keyCode, modifierMask: modifierMask, for: session)
+    return try assembleOutcome(handled: handled, for: session)
+  }
+
+  /// 失焦事务:组字态 commitComposition 并取回提交文本;非组字态 nil。
+  public distributed func blurTransaction(
+    for session: RimeSessionID
+  ) async throws(RimeError) -> RimeCommit? {
+    guard try engineStatus(for: session)?.isComposing ?? false else { return nil }
+    _ = try engineCommitComposition(for: session)
+    return try engineCommit(for: session)
+  }
+
+  public distributed func selectCandidateTransaction(
+    onCurrentPage index: Int, for session: RimeSessionID
+  ) async throws(RimeError) -> RimeKeyTransactionResult {
+    let handled = try engineSelectCandidateOnCurrentPage(at: index, for: session)
+    return try assembleOutcome(handled: handled, for: session)
+  }
+
+  public distributed func selectCandidateGlobalTransaction(
+    at index: Int, for session: RimeSessionID
+  ) async throws(RimeError) -> RimeKeyTransactionResult {
+    let handled = try engineSelectCandidate(at: index, for: session)
+    return try assembleOutcome(handled: handled, for: session)
+  }
+
+  public distributed func pageTransaction(
+    _ direction: RimePageDirection, for session: RimeSessionID
+  ) async throws(RimeError) -> RimeKeyTransactionResult {
+    let handled = try enginePage(direction, for: session)
+    return try assembleOutcome(handled: handled, for: session)
+  }
+
+  /// 弹性候选事务:全量候选枚举(句柄迭代器在本 actor 内同步推进)+ 引擎
+  /// 高亮换算为全省下标,一次往返返回。非组字态返回空列表。
+  public distributed func candidatesTransaction(
+    for session: RimeSessionID
+  ) async throws(RimeError) -> RimeElasticCandidates {
+    let composing = try engineStatus(for: session)?.isComposing ?? false
+    guard composing else {
+      return RimeElasticCandidates(
+        items: [], composing: false, globalHighlight: 0, pageSize: 0)
+    }
+    let context = try engineContext(for: session)
+    let menu = context?.menu
+    let pageSize = menu.map { Int($0.pageSize) } ?? 0
+    let globalHighlight =
+      composing
+      ? Int(menu?.pageNumber ?? 0) * pageSize + Int(menu?.highlightedCandidateIndex ?? 0) : 0
+
+    let iterator = try engineBeginCandidates(for: session)
+    defer { try? engineEndCandidateIterator(iterator) }
+    var items: [RimeCandidate] = []
+    while let candidate = try engineAdvanceCandidateIterator(iterator) {
+      items.append(candidate)
+    }
+    return RimeElasticCandidates(
+      items: items, composing: true, globalHighlight: globalHighlight, pageSize: pageSize)
+  }
+
+  /// 事务尾部组装(原客户端 assembleOutcome 上移):提交文本 + 组字态 +
+  /// 组字快照(仅组字态取 context)。
+  private func assembleOutcome(
+    handled: Bool, for session: RimeSessionID
+  ) throws(RimeError) -> RimeKeyTransactionResult {
+    let commit = try engineCommit(for: session)
+    let composing = try engineStatus(for: session)?.isComposing ?? false
+    let context = composing ? try engineContext(for: session) : nil
+    return RimeKeyTransactionResult(
+      handled: handled, commit: commit, composing: composing, context: context)
   }
 
   // MARK: 目录

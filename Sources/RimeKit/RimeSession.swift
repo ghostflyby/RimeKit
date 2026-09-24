@@ -174,9 +174,9 @@ public final class RimeSession: RimeSessionProtocol {
   {
     try await beginTransaction()
     defer { gate.release() }
-    let handled = try await root.processKey(
+    // 服务端组装事务:单次往返返回业务结果(原四次 RPC 组装已上移引擎)。
+    return try await root.keyTransaction(
       keyCode: keyCode, modifierMask: modifierMask, for: id)
-    return try await assembleOutcome(handled: handled)
   }
 
   func _blurTransaction() async throws -> RimeCommit? {
@@ -193,27 +193,13 @@ public final class RimeSession: RimeSessionProtocol {
   {
     try await beginTransaction()
     defer { gate.release() }
-    let handled = try await root.selectCandidateOnCurrentPage(at: index, for: id)
-    return try await assembleOutcome(handled: handled)
+    return try await root.selectCandidateTransaction(onCurrentPage: index, for: id)
   }
 
   func _candidatesTransaction() async throws -> RimeElasticCandidates {
     try await beginTransaction()
     defer { gate.release() }
-    var items: [RimeCandidate] = []
-    for try await candidate in candidates {
-      items.append(candidate)
-    }
-    let composing = try await root.status(for: id)?.isComposing ?? false
-    let context = try await root.context(for: id)
-    let menu = context?.menu
-    let global =
-      menu.map { Int($0.pageNumber) * Int($0.pageSize) + Int($0.highlightedCandidateIndex) } ?? 0
-    return RimeElasticCandidates(
-      items: items,
-      composing: composing,
-      globalHighlight: composing ? global : 0,
-      pageSize: menu.map { Int($0.pageSize) } ?? 0)
+    return try await root.candidatesTransaction(for: id)
   }
 
   func _selectCandidateGlobalTransaction(at index: Int) async throws
@@ -221,8 +207,7 @@ public final class RimeSession: RimeSessionProtocol {
   {
     try await beginTransaction()
     defer { gate.release() }
-    let handled = try await root.selectCandidate(at: index, for: id)
-    return try await assembleOutcome(handled: handled)
+    return try await root.selectCandidateGlobalTransaction(at: index, for: id)
   }
 
   func _pageTransaction(_ direction: RimePageDirection) async throws
@@ -230,8 +215,7 @@ public final class RimeSession: RimeSessionProtocol {
   {
     try await beginTransaction()
     defer { gate.release() }
-    let handled = try await root.page(direction, for: id)
-    return try await assembleOutcome(handled: handled)
+    return try await root.pageTransaction(direction, for: id)
   }
 
   /// 入门 + 失效检查(检查在门内进行,与 invalidate 串行)。
@@ -241,15 +225,6 @@ public final class RimeSession: RimeSessionProtocol {
       gate.release()
       throw RimeSessionError.invalidated
     }
-  }
-
-  /// 事务尾部组装:提交文本 + 组字态 + 组字快照。
-  private func assembleOutcome(handled: Bool) async throws -> RimeKeyTransactionResult {
-    let commit = try await root.commit(for: id)
-    let composing = try await root.status(for: id)?.isComposing ?? false
-    let context = composing ? try await root.context(for: id) : nil
-    return RimeKeyTransactionResult(
-      handled: handled, commit: commit, composing: composing, context: context)
   }
 }
 
