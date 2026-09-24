@@ -310,6 +310,42 @@
     }
   }
 
+  // MARK: 按键事务结果 / 弹性候选
+
+  extension RimeKeyTransactionResult: XPCMarshal {
+    public func marshal() throws(XPCMarshalError) -> XPCObject {
+      try pack(handled, commit, composing, context)
+    }
+
+    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+      -> RimeKeyTransactionResult
+    {
+      let f = try fields(object, minimum: 4)
+      return RimeKeyTransactionResult(
+        handled: try Bool.unmarshal(from: f[0]),
+        commit: try RimeCommit?.unmarshal(from: f[1]),
+        composing: try Bool.unmarshal(from: f[2]),
+        context: try RimeContext?.unmarshal(from: f[3]))
+    }
+  }
+
+  extension RimeElasticCandidates: XPCMarshal {
+    public func marshal() throws(XPCMarshalError) -> XPCObject {
+      try pack(items, composing, globalHighlight, pageSize)
+    }
+
+    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+      -> RimeElasticCandidates
+    {
+      let f = try fields(object, minimum: 4)
+      return RimeElasticCandidates(
+        items: try [RimeCandidate].unmarshal(from: f[0]),
+        composing: try Bool.unmarshal(from: f[1]),
+        globalHighlight: try Int.unmarshal(from: f[2]),
+        pageSize: try Int.unmarshal(from: f[3]))
+    }
+  }
+
   // MARK: 会话状态 / 翻页方向
 
   extension RimeState: XPCMarshal {

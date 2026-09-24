@@ -23,6 +23,53 @@
       #expect(restored.text == original.text)
     }
 
+    @Test func keyTransactionResultRoundTrip() throws {
+      let candidate = RimeCandidate(text: "你好", comment: "")
+      let original = RimeKeyTransactionResult(
+        handled: true,
+        commit: RimeCommit(text: "好"),
+        composing: true,
+        context: RimeContext(
+          composition: RimeComposition(
+            length: 6, cursorPosition: 2, selectionStart: 0, selectionEnd: 2,
+            preedit: "nihao"),
+          menu: RimeMenu(
+            pageSize: 5, pageNumber: 0, isLastPage: false, highlightedCandidateIndex: 1,
+            candidates: [candidate], selectKeys: "123456"),
+          commitTextPreview: "你好",
+          selectLabels: ["1", "2"]))
+      let restored = try RimeKeyTransactionResult.unmarshal(from: original.marshal())
+      #expect(restored.handled == original.handled)
+      #expect(restored.composing == original.composing)
+      #expect(restored.commit?.text == original.commit?.text)
+      #expect(restored.context?.composition.preedit == original.context?.composition.preedit)
+      #expect(
+        restored.context?.menu.highlightedCandidateIndex
+          == original.context?.menu.highlightedCandidateIndex)
+    }
+
+    @Test func keyTransactionResultNilSidesRoundTrip() throws {
+      let original = RimeKeyTransactionResult(
+        handled: false, commit: nil, composing: false, context: nil)
+      let restored = try RimeKeyTransactionResult.unmarshal(from: original.marshal())
+      #expect(!restored.handled)
+      #expect(restored.commit == nil && restored.context == nil)
+    }
+
+    @Test func elasticCandidatesRoundTrip() throws {
+      let original = RimeElasticCandidates(
+        items: [RimeCandidate(text: "例子", comment: ""), RimeCandidate(text: "栗子", comment: "li")],
+        composing: true,
+        globalHighlight: 7,
+        pageSize: 5)
+      let restored = try RimeElasticCandidates.unmarshal(from: original.marshal())
+      #expect(restored.composing == original.composing)
+      #expect(restored.globalHighlight == original.globalHighlight)
+      #expect(restored.pageSize == original.pageSize)
+      #expect(restored.items.map(\.text) == original.items.map(\.text))
+      #expect(restored.items.map(\.comment) == original.items.map(\.comment))
+    }
+
     @Test func statusRoundTrip() throws {
       let original = RimeStatus(
         schemaID: "luna_pinyin", schemaName: "明月拼音", isDisabled: false, isComposing: true,

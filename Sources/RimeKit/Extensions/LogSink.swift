@@ -73,33 +73,4 @@ private func rimeLogSinkCallback(
 		"[\(file, privacy: .public):\(r.line, privacy: .public)] \(message, privacy: .public)"
 	)
 }
-private func rimeLogSinkCallback(
-	_ context: UnsafeMutableRawPointer?, _ record: UnsafePointer<rime_logsink_record>?
-) {
-	guard let record else { return }
-	let r = record.pointee
 
-	let message: String
-	if let ptr = r.message {
-		let data = Data(bytes: ptr, count: r.message_length)
-		message = String(data: data, encoding: .utf8)
-			?? "(非 UTF8 rime 日志 \(r.message_length) 字节)"
-	} else {
-		message = "(empty)"
-	}
-	let file = r.base_filename.map { String(cString: $0) } ?? "?"
-
-	let level: OSLogType
-	switch r.severity {
-	case .info: level = .info
-	case .warning: level = .default
-	case .error: level = .error
-	case .fatal: level = .fault
-	@unknown default: level = .default
-	}
-
-	RimeLog.logger.log(
-		level: level,
-		"[\(file, privacy: .public):\(r.line, privacy: .public)] \(message, privacy: .public)"
-	)
-}
