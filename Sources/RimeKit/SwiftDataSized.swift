@@ -10,7 +10,7 @@ import RimeC
 /// 零初始化的 C 结构体统一入口:首字段 `data_size` 之前的区域为元数据,
 /// 置零后才是可用载荷;keypath 测量前缀尺寸后整块清零。
 protocol CDataSized {
-  // swift-format-ignore: DoNotUseSemicolons
+  // swift-format-ignore: AlwaysUseLowerCamelCase, DoNotUseSemicolons
   var data_size: Int32 { get set }
   init()
 }
