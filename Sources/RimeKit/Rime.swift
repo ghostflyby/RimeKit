@@ -113,9 +113,16 @@ public distributed actor Rime {
   // MARK: 生命周期
 
   public distributed func setup(with traits: RimeTraits) async throws(RimeError) {
+    // logsink 插件接管日志:modules 追加 "logsink",log_dir = "" 禁用文件
+    // 系统日志,stderr 阈值在 setup 后置 SILENT,glog 记录全部转接 os_log
+    // (RimeLogSink)。log_dir = "" 是单向操作,之后无法恢复文件日志。
+    var traits = traits
+    if !traits.modules.contains("logsink") { traits.modules.append("logsink") }
+    traits.logDir = ""
     var t = rime_traits_t.rimeStructInit()
     let handle = traits.toCStructure(&t)
     rimeApi.setup(&t)
+    installLogSink()
     withExtendedLifetime(handle) {}
   }
 
