@@ -80,12 +80,18 @@ let package = Package(
     .target(
       name: "RimeDeployCore",
       dependencies: ["RimeKit"]),
-    // 工具本体:参数解析外壳 + 引擎驱动。不声明 librime 二进制依赖:链接形态
-    // 跟随消费方 traits(动态桩/静态档各自就位,静态档的 -lc++ 由 RimeC
-    // 传播)。
+    // 工具本体:参数解析外壳 + 引擎驱动。librime 链接跟随消费方 traits:
+    // 动态档挂 RimeDynamic 产品(桩只是链接旗标,不会把 framework 工件带进
+    // 构建图,须显式依赖才有可解析的框架);静态档由 RimeC 的条件产品与
+    // -lc++ 传播承接。
     .executableTarget(
       name: "RimeDeploy",
-      dependencies: ["RimeDeployCore"]),
+      dependencies: [
+        "RimeDeployCore",
+        .product(
+          name: "RimeDynamic", package: "librime-xcframework",
+          condition: .when(traits: ["librimeDynamic"])),
+      ]),
     .plugin(
       name: "RimeDeployPlugin",
       capability: .buildTool(),
