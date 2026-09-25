@@ -12,7 +12,12 @@ let package = Package(
   products: [
     .library(
       name: "RimeKit",
-      targets: ["RimeKit"])
+      targets: ["RimeKit"]),
+    // 在消费方构建中调用 RimeDeploy(本包内 target,非产品)的 build tool
+    // plugin:target 内的 Rime 数据在构建期编译,并以目录资源的形式进 bundle。
+    .plugin(
+      name: "RimeDeployPlugin",
+      targets: ["RimeDeployPlugin"])
   ],
   traits: [
     // 下游 librime 链接选型(SE-0450):消费方在 .package(traits:) 显式列出即取代
@@ -70,6 +75,39 @@ let package = Package(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS]))
       ]),
+    // 部署逻辑所在,引擎操作经 RimeKit 的进程内共享根;librime 的链接形态
+    // 由下方可执行文件的 traits 选型(RimeC 的条件产品)决定。
+    .target(
+      name: "RimeDeployCore",
+      dependencies: ["RimeKit"]),
+    // 工具本体:参数解析外壳 + 引擎驱动。不声明 librime 二进制依赖:链接形态
+    // 跟随消费方 traits(动态桩/静态档各自就位,静态档的 -lc++ 由 RimeC
+    // 传播)。
+    .executableTarget(
+      name: "RimeDeploy",
+      dependencies: ["RimeDeployCore"]),
+    .plugin(
+      name: "RimeDeployPlugin",
+      capability: .buildTool(),
+      dependencies: ["RimeDeploy"],
+      path: "Plugins/RimeDeployPlugin"),
+    // RimeDeployCore 供进程内调用;RimeDeploy 保证冒烟用例 spawn 的可执行文件被构建。
+    .testTarget(
+      name: "RimeDeployToolTests",
+      dependencies: ["RimeDeploy", "RimeDeployCore"],
+      path: "Tests/RimeDeployToolTests"),
+    // 把本包的插件应用到自己的数据目录上,从而断言"构建系统把什么带进了
+    // bundle"(目录结构、目录名),这是只测工具测不到的层面。两个数据目录
+    // (惯例名 RimeData + 非常规名 MyRimeData)并存,顺带断言多数据集一般性。
+    .testTarget(
+      name: "RimeDeployPluginTests",
+      dependencies: [
+        "RimeKit",
+        .product(name: "RimeDynamic", package: "librime-xcframework"),
+      ],
+      path: "Tests/RimeDeployPluginTests",
+      exclude: ["RimeData", "MyRimeData"],
+      plugins: [.plugin(name: "RimeDeployPlugin")]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
