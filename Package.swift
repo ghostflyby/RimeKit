@@ -45,7 +45,7 @@ let package = Package(
     // .package(path: "Support/librime-system"),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
-    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.0")
+    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.1")
   ],
   targets: [
     // librime C API 的包内转出口:C 模块名 Rime 与 RimeKit 的分布式 actor Rime 同名,
