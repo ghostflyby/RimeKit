@@ -38,11 +38,16 @@ public distributed actor Rime {
 
   /// 串行化不变式(§3.7):每进程恰有一个本地共享实例;
   /// XPC 服务进程由 shouldAccept 单 peer 策略保证。
+  ///
+  /// 进程内驱动引擎(部署工具、测试、宿主进程内会话)一律用它,不另行构造:
+  /// librime 状态进程级全局,第二个本地根会绕过本 actor 的串行执行域。
+  /// macOS 的系统是不带服务的 XPCDistributedActorSystem——本地引用由编译器
+  /// 直连执行、不走远程,连接只承担 actor 系统的类型;iOS 为 RimeLocalSystem。
   #if os(macOS)
-    internal static let localShared = Rime(
+    public static let localShared = Rime(
       actorSystem: XPCDistributedActorSystem(connection: XPCConnection(name: nil)))
   #else
-    internal static let localShared = Rime(actorSystem: RimeLocalSystem())
+    public static let localShared = Rime(actorSystem: RimeLocalSystem())
   #endif
 
   internal let rimeApi: RimeApi
