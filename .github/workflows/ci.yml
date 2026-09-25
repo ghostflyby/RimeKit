@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: swift-format lint
-        run: xcrun swift-format lint --strict --recursive Sources Tests Plugins
+        run: xcrun swift-format lint --strict --recursive Sources Tests
 
 
   # macOS 全量测试:双后端参数化(进程内 / 进程内 XPC 连接对)65 项

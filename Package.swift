@@ -13,11 +13,6 @@ let package = Package(
     .library(
       name: "RimeKit",
       targets: ["RimeKit"]),
-    // 在消费方构建中调用 RimeDeploy(本包内 target,非产品)的 build tool
-    // plugin:target 内的 Rime 数据在构建期编译,并以目录资源的形式进 bundle。
-    .plugin(
-      name: "RimeDeployPlugin",
-      targets: ["RimeDeployPlugin"])
   ],
   traits: [
     // 下游 librime 链接选型(SE-0450):消费方在 .package(traits:) 显式列出即取代
@@ -75,47 +70,6 @@ let package = Package(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS]))
       ]),
-    // 部署逻辑所在,引擎操作经 RimeKit 的进程内共享根;librime 的链接形态
-    // 由下方可执行文件的 traits 选型(RimeC 的条件产品)决定。
-    .target(
-      name: "RimeDeployCore",
-      dependencies: ["RimeKit"]),
-    // 工具本体:参数解析外壳 + 引擎驱动。librime 链接跟随消费方 traits:
-    // 动态档挂 RimeDynamic 产品(桩只是链接旗标,不会把 framework 工件带进
-    // 构建图,须显式依赖才有可解析的框架);静态档由 RimeC 的条件产品与
-    // -lc++ 传播承接。
-    .executableTarget(
-      name: "RimeDeploy",
-      dependencies: [
-        "RimeDeployCore",
-        .product(
-          name: "RimeDynamic", package: "librime-xcframework",
-          condition: .when(traits: ["librimeDynamic"])),
-      ]),
-    .plugin(
-      name: "RimeDeployPlugin",
-      capability: .buildTool(),
-      dependencies: ["RimeDeploy"],
-      path: "Plugins/RimeDeployPlugin"),
-    // RimeDeployCore 供进程内调用。不依赖 RimeDeploy 本身:统一测试 runner 会
-    // 把依赖边的可执行对象与插件工具变体对象一并链入,产生重复符号;冒烟用例
-    // 所 spawn 的二进制由 PluginTests 触发的插件构建提供,全程同轮存在。
-    .testTarget(
-      name: "RimeDeployToolTests",
-      dependencies: ["RimeDeployCore"],
-      path: "Tests/RimeDeployToolTests"),
-    // 把本包的插件应用到自己的数据目录上,从而断言"构建系统把什么带进了
-    // bundle"(目录结构、目录名),这是只测工具测不到的层面。两个数据目录
-    // (惯例名 RimeData + 非常规名 MyRimeData)并存,顺带断言多数据集一般性。
-    .testTarget(
-      name: "RimeDeployPluginTests",
-      dependencies: [
-        "RimeKit",
-        .product(name: "RimeDynamic", package: "librime-xcframework"),
-      ],
-      path: "Tests/RimeDeployPluginTests",
-      exclude: ["RimeData", "MyRimeData"],
-      plugins: [.plugin(name: "RimeDeployPlugin")]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
