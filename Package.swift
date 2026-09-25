@@ -97,10 +97,12 @@ let package = Package(
       capability: .buildTool(),
       dependencies: ["RimeDeploy"],
       path: "Plugins/RimeDeployPlugin"),
-    // RimeDeployCore 供进程内调用;RimeDeploy 保证冒烟用例 spawn 的可执行文件被构建。
+    // RimeDeployCore 供进程内调用。不依赖 RimeDeploy 本身:统一测试 runner 会
+    // 把依赖边的可执行对象与插件工具变体对象一并链入,产生重复符号;冒烟用例
+    // 所 spawn 的二进制由 PluginTests 触发的插件构建提供,全程同轮存在。
     .testTarget(
       name: "RimeDeployToolTests",
-      dependencies: ["RimeDeploy", "RimeDeployCore"],
+      dependencies: ["RimeDeployCore"],
       path: "Tests/RimeDeployToolTests"),
     // 把本包的插件应用到自己的数据目录上,从而断言"构建系统把什么带进了
     // bundle"(目录结构、目录名),这是只测工具测不到的层面。两个数据目录
