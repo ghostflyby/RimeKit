@@ -30,41 +30,53 @@ jobs:
       - name: swift test
         run: swift test --no-parallel
 
-  # iOS 目标构建:库 + 测试目标(iOS 16 地板;generic 目的地无需模拟器设备)
+  # iOS 目的地构建:swift 构建引擎(destination)——与 macOS 同一构建器;
+  # 插件工具按消费上下文在宿主构建运行(实证:编译数据进目的地 bundle)
   ios-build:
     name: iOS · build
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: xcodebuild build-for-testing (generic iOS Simulator)
-        # 包内含可执行 target 后 Xcode 生成三个 scheme:测试动作在
-        # RimeKit-Package(包级)上,RimeKit 只是库产品 scheme。
+      - name: Generate iOS destination
         run: |
-          set -o pipefail
-          xcodebuild build-for-testing \
-            -scheme RimeKit-Package \
-            -destination 'generic/platform=iOS Simulator' \
-            -skipMacroValidation -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tail -400
+          SDK=$(xcrun -sdk iphonesimulator -show-sdk-path)
+          BIN=$(dirname "$(xcrun --find swiftc)")
+          cat > "$RUNNER_TEMP/dest-ios.json" <<EOF
+          {
+            "version": 1,
+            "target": "arm64-apple-ios16.0-simulator",
+            "sdk": "$SDK",
+            "toolchain-bin-dir": "$BIN",
+            "extra-cc-flags": [],
+            "extra-swiftc-flags": [],
+            "extra-cpp-flags": []
+          }
+          EOF
+          echo "DEST_IOS=$RUNNER_TEMP/dest-ios.json" >> "$GITHUB_ENV"
+      - name: swift build (含测试目标)
+        run: swift build --build-tests --destination "$DEST_IOS"
 
-  # iOS 模拟器运行测试(设备 id 运行时发现,抗模拟器名称/OS 漂移)
+  # iOS 目的地 swift test:构建阶段同上;运行阶段 SwiftPM 能否执行,观察中
   ios-test:
     name: iOS · simulator test
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Select simulator
+      - name: Generate iOS destination
         run: |
-          SIM_ID=$(xcrun simctl list devices available | grep -m1 'iPhone' | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
-          echo "SIM_ID=$SIM_ID" >> "$GITHUB_ENV"
-      - name: xcodebuild test
-        # 同上:测试动作在 RimeKit-Package 上。
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -scheme RimeKit-Package \
-            -destination "platform=iOS Simulator,id=$SIM_ID" \
-            -parallel-testing-enabled NO \
-            -skipMacroValidation -skipPackagePluginValidation \
-            2>&1 | tail -400
+          SDK=$(xcrun -sdk iphonesimulator -show-sdk-path)
+          BIN=$(dirname "$(xcrun --find swiftc)")
+          cat > "$RUNNER_TEMP/dest-ios.json" <<EOF
+          {
+            "version": 1,
+            "target": "arm64-apple-ios16.0-simulator",
+            "sdk": "$SDK",
+            "toolchain-bin-dir": "$BIN",
+            "extra-cc-flags": [],
+            "extra-swiftc-flags": [],
+            "extra-cpp-flags": []
+          }
+          EOF
+          echo "DEST_IOS=$RUNNER_TEMP/dest-ios.json" >> "$GITHUB_ENV"
+      - name: swift test
+        run: swift test --destination "$DEST_IOS" --no-parallel
