@@ -96,8 +96,8 @@ struct RimeDeployPlugin: BuildToolPlugin {
     }
     // 被导入表(import_tables 引用)合并进主表,不产出任何 bin——
     // 不为它们声明三件套。
-    let importedStems = Set(dictEntries.flatMap { importedStems(in: $0.text) })
-    for entry in dictEntries where !importedStems.contains(entry.stem) {
+    let importedSet = Set(dictEntries.flatMap { importedStems(in: $0.text) })
+    for entry in dictEntries where !importedSet.contains(entry.stem) {
       for suffix in [".table.bin", ".prism.bin", ".reverse.bin"] {
         expected.append("\(entry.stem)\(suffix)")
       }
