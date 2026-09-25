@@ -13,6 +13,9 @@ let package = Package(
     .library(
       name: "RimeKit",
       targets: ["RimeKit"]),
+    .plugin(
+      name: "RimeDeployPlugin",
+      targets: ["RimeDeployPlugin"]),
   ],
   traits: [
     // 下游 librime 链接选型(SE-0450):消费方在 .package(traits:) 显式列出即取代
@@ -70,6 +73,30 @@ let package = Package(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS]))
       ]),
+    // 构建期部署插件:执行 RimeKitPreBuild 发布的预构建静态工具——二进制
+    // 自包含(静态内嵌 librime),零动态框架依赖,对构建器与目的地免疫;
+    // 工具版本由下方 binaryTarget 的 url+checksum 钉死,经 bump 工作流更新。
+    .plugin(
+      name: "RimeDeployPlugin",
+      capability: .buildTool(),
+      dependencies: ["RimeDeploy"],
+      path: "Plugins/RimeDeployPlugin"),
+    .binaryTarget(
+      name: "RimeDeploy",
+      url: "https://github.com/ghostflyby/RimeKitPreBuild/releases/download/v0.1.1/RimeDeploy-v0.1.1.artifactbundle.zip",
+      checksum: "bd8fe79e802e148ebe8268d53628d89d72de4a0870dbd066c501fcd424c1a651"
+    ),
+    // 插件附着到本包自己的数据目录(惯例名 + 非常规名并存),断言编译数据
+    // 进 bundle、布局保留,并经 RimeKit(静态)进程内加载验证。
+    .testTarget(
+      name: "RimeDeployPluginTests",
+      dependencies: [
+        "RimeKit",
+        .product(name: "RimeDynamic", package: "librime-xcframework"),
+      ],
+      path: "Tests/RimeDeployPluginTests",
+      exclude: ["RimeData", "MyRimeData"],
+      plugins: [.plugin(name: "RimeDeployPlugin")]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
