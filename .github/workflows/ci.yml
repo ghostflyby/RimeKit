@@ -46,7 +46,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -skipMacroValidation -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tail -40
+            2>&1 | tail -400
 
   # iOS 模拟器运行测试(设备 id 运行时发现,抗模拟器名称/OS 漂移)
   ios-test:
@@ -67,4 +67,4 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIM_ID" \
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
-            2>&1 | tail -40
+            2>&1 | tail -400
