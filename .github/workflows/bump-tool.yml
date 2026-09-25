@@ -1,0 +1,59 @@
+name: Bump tool
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    name: Check RimeKitPreBuild latest release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest tool release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh api repos/ghostflyby/RimeKitPreBuild/releases/latest --jq .tag_name)
+          URL="https://github.com/ghostflyby/RimeKitPreBuild/releases/download/${TAG}/RimeDeploy-${TAG}.artifactbundle.zip"
+          SUM=$(curl -fsSL "${URL}.sha256" | awk '{print $1}')
+          {
+            echo "tag=${TAG}"
+            echo "url=${URL}"
+            echo "sum=${SUM}"
+          } >> "$GITHUB_ENV"
+
+      - name: Update binary target
+        run: |
+          if grep -q "releases/download/${{ env.tag }}/" Package.swift; then
+            echo "已是当前工具版本(${{ env.tag }}),跳过"
+            exit 0
+          fi
+          sed -i '' \
+            -e "s#releases/download/[^\"]*#releases/download/${{ env.tag }}/RimeDeploy-${{ env.tag }}.artifactbundle.zip#" \
+            -e "s#checksum: \"[0-9a-f]*\"#checksum: \"${{ env.sum }}\"#" \
+            Package.swift
+          git diff --stat
+
+      # 注意:GITHUB_TOKEN 创建的 PR 不会触发 CI 工作流;两行变更机械且
+      # 校验和取自发布管线,合并后 main CI 兜底验证。
+      - name: Create bump PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BR="bump-tool/${{ env.tag }}"
+          git checkout -b "$BR"
+          git add Package.swift
+          git commit -m "chore:RimeDeploy 工具更新至 ${{ env.tag }}"
+          git push origin "$BR"
+          gh pr create --head "$BR" \
+            --title "chore:RimeDeploy 工具更新至 ${{ env.tag }}" \
+            --body "RimeKitPreBuild 发布了新版本;binaryTarget 的 url/checksum 已同步(校验和取自发布管线 sha256 资产)。"
