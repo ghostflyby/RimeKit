@@ -77,36 +77,40 @@ struct RimeDeployPluginTests {
     #expect(contents(of: opencc) == ["t2s.json"])
   }
 
-  @Test("进程内能拿到的最强检查:编译产物可被 RimeKit 直接加载(select_schema 成功)")
-  func compiledDataIsLoadable() async {
-    // 引擎初始化发生在退出测试的全新子进程内:统一 runner 形态下多个 bundle
-    // 共享一个进程,进程内的引擎状态会跨 bundle 污染(实证:引导部署失败),
-    // 子进程隔离让本用例在任何 runner 形态下都零残留。
-    await #expect(processExitsWith: .success) {
-      let userDirectory = NSTemporaryDirectory() + "rime-plugin-tests-\(getpid())"
-      try? FileManager.default.createDirectory(
-        atPath: userDirectory, withIntermediateDirectories: true)
-      defer { try? FileManager.default.removeItem(atPath: userDirectory) }
+  // 退出测试 API 在 iOS 上不可用,而引擎使用又必须隔离在子进程里——本用例
+  // 以 macOS 为限(iOS 上编译剔除,零用例运行);bundle 的其余断言平台中性。
+  #if os(macOS)
+    @Test("进程内能拿到的最强检查:编译产物可被 RimeKit 直接加载(select_schema 成功)")
+    func compiledDataIsLoadable() async {
+      // 引擎初始化发生在退出测试的全新子进程内:统一 runner 形态下多个 bundle
+      // 共享一个进程,进程内的引擎状态会跨 bundle 污染(实证:引导部署失败),
+      // 子进程隔离让本用例在任何 runner 形态下都零残留。
+      await #expect(processExitsWith: .success) {
+        let userDirectory = NSTemporaryDirectory() + "rime-plugin-tests-\(getpid())"
+        try? FileManager.default.createDirectory(
+          atPath: userDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: userDirectory) }
 
-      let traits = RimeTraits(
-        sharedDataDir: userDirectory,
-        userDataDir: userDirectory,
-        distributionName: "tests",
-        distributionCodeName: "tests",
-        distributionVersion: "1",
-        appName: "rime.tests",
-        minLogLevel: .fatal,
-        logDir: "",
-        prebuiltDataDir: Bundle.module.resourceURL!.appendingPathComponent("RimeData").path,
-        stagingDir: userDirectory)
+        let traits = RimeTraits(
+          sharedDataDir: userDirectory,
+          userDataDir: userDirectory,
+          distributionName: "tests",
+          distributionCodeName: "tests",
+          distributionVersion: "1",
+          appName: "rime.tests",
+          minLogLevel: .fatal,
+          logDir: "",
+          prebuiltDataDir: Bundle.module.resourceURL!.appendingPathComponent("RimeData").path,
+          stagingDir: userDirectory)
 
-      // 子进程独占引擎,进程退出即回收,不做 finalize。
-      let root = Rime.localShared
-      try await root.setup(with: traits)
-      try await root.initialize(with: traits)
+        // 子进程独占引擎,进程退出即回收,不做 finalize。
+        let root = Rime.localShared
+        try await root.setup(with: traits)
+        try await root.initialize(with: traits)
 
-      let session = try #require(await root.createSession())
-      #expect(try await root.selectSchema("probe", for: session) == true)
+        let session = try #require(await root.createSession())
+        #expect(try await root.selectSchema("probe", for: session) == true)
+      }
     }
-  }
+  #endif
 }
