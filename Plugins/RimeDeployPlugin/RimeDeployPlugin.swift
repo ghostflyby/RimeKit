@@ -63,21 +63,28 @@ struct RimeDeployPlugin: BuildToolPlugin {
     // 的前缀;同名目录在同一个 target 里不存在,输出互不撞车。
     let outputDirectory = context.pluginWorkDirectoryURL.appending(path: name)
 
-    // librime 将要产出的名字,只由输入**文件名**推导:构建命令必须在运行前声明
-    // 输出,且不得读取输入内容来推导。这能成立,是因为数据内部的标识符与文件名
-    // 一致——不一致时 RimeDeploy 会报出来。
+    // librime 将要产出的名字,由两类信息推导:输入文件名(构建命令必须在
+    // 运行前声明输出,不得读取输入内容来推导)+ **词典的 import_tables 结构**
+    // (需要读 dict.yaml 内容:被导入表合并进主表,不产出任何 bin——雾凇/
+    // 万象布局;不解析则声明与实际产出错位,部署成功也会被核对误杀)。
+    // 数据内部的标识符与文件名一致——不一致时 RimeDeploy 会报出来。
     var expected: [String] = []
     var copied: [String] = []
+    var dictEntries: [(relative: String, stem: String, text: String)] = []
     for relative in relativeInputs {
       if relative.hasSuffix(".schema.yaml") {
         // 编译出的配置沿用 librime 由 schema 自身 id 编码出的名字,
         // 工具会校验它等于文件名。
         expected.append(relative)
       } else if relative.hasSuffix(".dict.yaml") {
-        let stem = relative.replacingOccurrences(of: ".dict.yaml", with: "")
-        for suffix in [".table.bin", ".prism.bin", ".reverse.bin"] {
-          expected.append("\(stem)\(suffix)")
-        }
+        let text = try String(
+          contentsOf: dataDirectory.appending(path: relative), encoding: .utf8)
+        dictEntries.append(
+          (
+            relative,
+            String(relative.dropLast(".dict.yaml".count)),
+            text
+          ))
       } else {
         // 其余是 librime 在**运行期**读取而非编译的数据——`default.yaml` 决定
         // 默认选项与 schema 列表,`symbols.yaml` 在编译时被 punctuator 内联,
@@ -85,6 +92,14 @@ struct RimeDeployPlugin: BuildToolPlugin {
         // 工具会清除输出目录里它没被告知要产出的东西,而对被复制的文件而言,
         // 工具正是产出者。
         copied.append(relative)
+      }
+    }
+    // 被导入表(import_tables 引用)合并进主表,不产出任何 bin——
+    // 不为它们声明三件套。
+    let importedStems = Set(dictEntries.flatMap { importedStems(in: $0.text) })
+    for entry in dictEntries where !importedStems.contains(entry.stem) {
+      for suffix in [".table.bin", ".prism.bin", ".reverse.bin"] {
+        expected.append("\(entry.stem)\(suffix)")
       }
     }
 
@@ -112,6 +127,35 @@ struct RimeDeployPlugin: BuildToolPlugin {
       inputFiles: inputFiles,
       outputFiles: [outputDirectory]
     )
+  }
+
+  /// dict.yaml 文本里 `import_tables` 引用的词典 stem 集合。只认两种写法:
+  /// 块列表(`- 项`)与流式(`[a, b]`),到 yaml 头结束(`...`)或下一个
+  /// 顶层键为止——该键的惯例写法稳定(雾凇/万象/扩展表皆同型)。
+  private func importedStems(in text: String) -> Set<String> {
+    var stems: Set<String> = []
+    var inList = false
+    for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+      let line = rawLine.trimmingCharacters(in: .whitespaces)
+      if line == "..." { break }
+      if line.hasPrefix("import_tables:") {
+        inList = true
+        let inline = line.dropFirst("import_tables:".count).trimmingCharacters(in: .whitespaces)
+        if inline.hasPrefix("["), inline.hasSuffix("]") {
+          for item in inline.dropFirst().dropLast().split(separator: ",") {
+            stems.insert(String(item.trimmingCharacters(in: .whitespaces)))
+          }
+        }
+        continue
+      }
+      guard inList else { continue }
+      if line.hasPrefix("- ") {
+        stems.insert(String(line.dropFirst(2).trimmingCharacters(in: .whitespaces)))
+      } else if !line.isEmpty {
+        inList = false
+      }
+    }
+    return stems
   }
 
   /// target 内的全部数据目录:每个**直接**躺着 `*.schema.yaml` 的目录都是一个

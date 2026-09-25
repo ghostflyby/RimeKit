@@ -95,7 +95,7 @@ let package = Package(
         .product(name: "RimeDynamic", package: "librime-xcframework"),
       ],
       path: "Tests/RimeDeployPluginTests",
-      exclude: ["RimeData", "MyRimeData"],
+      exclude: ["RimeData", "MyRimeData", "WanxiangData"],
       plugins: [.plugin(name: "RimeDeployPlugin")]),
     .testTarget(
       name: "RimeKitTests",
