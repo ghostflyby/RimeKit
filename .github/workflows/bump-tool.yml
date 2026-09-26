@@ -30,9 +30,14 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Update binary target
+        id: update
         run: |
-          if grep -q "releases/download/${{ env.tag }}/" Package.swift; then
+          # 幂等守卫:url 与校验和都对上才算"已是当前版本"——只查 tag 会漏掉
+          # 同 tag 重传发布(新 zip 新校验和)的情况。
+          if grep -q "releases/download/${{ env.tag }}/" Package.swift \
+            && grep -q 'checksum: "${{ env.sum }}"' Package.swift; then
             echo "已是当前工具版本(${{ env.tag }}),跳过"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           sed -i '' \
@@ -40,17 +45,20 @@ jobs:
             -e "s#checksum: \"[0-9a-f]*\"#checksum: \"${{ env.sum }}\"#" \
             Package.swift
           git diff --stat
+          echo "changed=true" >> "$GITHUB_OUTPUT"
 
       # 注意:GITHUB_TOKEN 创建的 PR 不会触发 CI 工作流;两行变更机械且
       # 校验和取自发布管线,合并后 main CI 兜底验证。
       - name: Create bump PR
+        if: steps.update.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           BR="bump-tool/${{ env.tag }}"
-          git checkout -b "$BR"
+          # -B:上一轮推送到 push 为止的半途分支不挡本轮(幂等重跑)。
+          git checkout -B "$BR"
           git add Package.swift
           git commit -m "chore:RimeDeploy 工具更新至 ${{ env.tag }}"
           git push origin "$BR"
