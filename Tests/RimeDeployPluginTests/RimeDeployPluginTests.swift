@@ -86,6 +86,23 @@ struct RimeDeployPluginTests {
     )
   }
 
+  @Test("外来词典:prism 名跟输入词典走,除非 translator/prism 显式点名;孤儿词典零产出")
+  func foreignDictionaryPrismNamingAndOrphan() {
+    // 万象布局的第二处坑:wanxiang_phrase schema 的输入表是 custom_phrase——
+    // 未点名 prism 时产出的 prism 与词典同名(custom_phrase.prism.bin),不
+    // 是 schema_id;wanxiang_phrase_t9 显式点名了自己的 prism。dicts/t9_abbrev
+    // 无人引用,连二库都没有。按"每本词典三件套"或按 schema_id 推断 prism,
+    // 这两类都会被核对误杀。
+    let files = contents(of: compiledData(named: "WanxiangData"))
+    #expect(files.contains("custom_phrase.table.bin"), "found \(files)")
+    #expect(files.contains("custom_phrase.reverse.bin"), "found \(files)")
+    #expect(files.contains("custom_phrase.prism.bin"), "found \(files)")
+    #expect(!files.contains("wanxiang_phrase.prism.bin"), "found \(files)")
+    #expect(files.contains("wanxiang_phrase_t9.prism.bin"), "found \(files)")
+    #expect(
+      !files.contains(where: { $0.hasPrefix("t9_abbrev.") }), "found \(files)")
+  }
+
   @Test func nestedDataKeepsItsLayout() {
     // 编译数据以单个目录声明,因此保留数据目录的布局——包括 librime 按名字
     // 解析的路径,如 `<shared>/opencc/<name>`。若逐个声明输出文件,它们会被

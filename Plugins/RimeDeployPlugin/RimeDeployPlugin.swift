@@ -63,28 +63,41 @@ struct RimeDeployPlugin: BuildToolPlugin {
     // 的前缀;同名目录在同一个 target 里不存在,输出互不撞车。
     let outputDirectory = context.pluginWorkDirectoryURL.appending(path: name)
 
-    // librime 将要产出的名字,由两类信息推导:输入文件名(构建命令必须在
-    // 运行前声明输出,不得读取输入内容来推导)+ **词典的 import_tables 结构**
-    // (需要读 dict.yaml 内容:被导入表合并进主表,不产出任何 bin——雾凇/
-    // 万象布局;不解析则声明与实际产出错位,部署成功也会被核对误杀)。
-    // 数据内部的标识符与文件名一致——不一致时 RimeDeploy 会报出来。
-    var expected: [String] = []
+    // librime 将要产出的名字,由 schema 文件的内容推导(构建命令必须在运行
+    // 前声明输出,而名字编码在数据内部,读 yaml 是唯一途径;数据内部的标识符
+    // 与文件名一致——不一致时 RimeDeploy 会报出来):
+    //
+    // * 每个 *.schema.yaml 部署出同名编译配置,外加一个 prism——实证 librime
+    //   以**输入词典的名字**为 prism 命名,而非 schema_id;translator/prism
+    //   显式点名时用点名者(万象:wanxiang_phrase[_t9] 以 custom_phrase 为
+    //   输入表又各自点名了自己的 prism,于是名为 custom_phrase 的 prism 不
+    //   存在,按 schema_id 或按"每词典一个"声明都会误报);
+    // * translator/dictionary 点名的词典编译出 table/reverse 二库;被
+    //   import_tables 合并进主表的与无人引用的孤儿词典什么 bin 都不产出
+    //   (万象的 dicts/ 子表、t9_abbrev);
+    // * reverse_lookup/dictionary 指向的反查词典只为它声明 reverse 一库——
+    //   它是被查询方,不作为输入表挂载。
+    //
+    // 词典源文件本身只活在编译期,既不声明也不复制。
+    var expected = Set<String>()
     var copied: [String] = []
-    var dictEntries: [(relative: String, stem: String, text: String)] = []
+    var dictionaries = Set<String>()
+    var reverseOnly = Set<String>()
     for relative in relativeInputs {
       if relative.hasSuffix(".schema.yaml") {
-        // 编译出的配置沿用 librime 由 schema 自身 id 编码出的名字,
-        // 工具会校验它等于文件名。
-        expected.append(relative)
-      } else if relative.hasSuffix(".dict.yaml") {
         let text = try String(
           contentsOf: dataDirectory.appending(path: relative), encoding: .utf8)
-        dictEntries.append(
-          (
-            relative,
-            String(relative.dropLast(".dict.yaml".count)),
-            text
-          ))
+        let keys = deployKeys(in: text)
+        expected.insert(relative)
+        if let dictionary = keys.translatorDictionary {
+          expected.insert("\((keys.translatorPrism ?? dictionary)).prism.bin")
+          dictionaries.insert(dictionary)
+        }
+        if let reverse = keys.reverseLookupDictionary {
+          reverseOnly.insert(reverse)
+        }
+      } else if relative.hasSuffix(".dict.yaml") {
+        // 词典产出什么取决于有没有 schema 点名它(见上),不在源层面声明。
       } else {
         // 其余是 librime 在**运行期**读取而非编译的数据——`default.yaml` 决定
         // 默认选项与 schema 列表,`symbols.yaml` 在编译时被 punctuator 内联,
@@ -94,13 +107,13 @@ struct RimeDeployPlugin: BuildToolPlugin {
         copied.append(relative)
       }
     }
-    // 被导入表(import_tables 引用)合并进主表,不产出任何 bin——
-    // 不为它们声明三件套。
-    let importedSet = Set(dictEntries.flatMap { importedStems(in: $0.text) })
-    for entry in dictEntries where !importedSet.contains(entry.stem) {
-      for suffix in [".table.bin", ".prism.bin", ".reverse.bin"] {
-        expected.append("\(entry.stem)\(suffix)")
-      }
+    for dictionary in dictionaries {
+      expected.insert("\(dictionary).table.bin")
+      expected.insert("\(dictionary).reverse.bin")
+      reverseOnly.remove(dictionary)
+    }
+    for dictionary in reverseOnly {
+      expected.insert("\(dictionary).reverse.bin")
     }
 
     let arguments =
@@ -116,7 +129,7 @@ struct RimeDeployPlugin: BuildToolPlugin {
           .path(percentEncoded: false),
         "--mode", "prebuild",
       ]
-      + expected.flatMap { ["--expect", $0] }
+      + expected.sorted().flatMap { ["--expect", $0] }
       + copied.flatMap { ["--also-copy", $0] }
 
     return .buildCommand(
@@ -129,40 +142,47 @@ struct RimeDeployPlugin: BuildToolPlugin {
     )
   }
 
-  /// dict.yaml 文本里 `import_tables` 引用的词典 stem 集合。只认两种写法:
-  /// 块列表(`- 项`)与流式(`[a, b]`),到 yaml 头结束(`...`)或下一个
-  /// 顶层键为止——该键的惯例写法稳定(雾凇/万象/扩展表皆同型)。
-  private func importedStems(in text: String) -> Set<String> {
-    // 列表项允许行尾注释:`- dicts/zi #中文表`——名字取 `#` 之前的部分。
-    func name(from item: Substring) -> String {
-      String(item.split(separator: "#")[0]).trimmingCharacters(in: .whitespaces)
+  /// schema.yaml 文本里与部署相关的顶层小节:`translator` 的 `dictionary`/
+  /// `prism` 与 `reverse_lookup` 的 `dictionary`。只认惯例写法:顶格键行开
+  /// 小节,缩进行收字段,行尾注释与成对引号剔除——雾凇/万象/官方方案皆同型;
+  /// 同名字段出现在别处的不看(万象顶层 `custom_phrase.prism` 是运行期翻译器
+  /// 的实例配置,不是部署产出物的名字来源)。
+  private func deployKeys(in text: String) -> (
+    translatorDictionary: String?, translatorPrism: String?, reverseLookupDictionary: String?
+  ) {
+    func value(_ line: Substring) -> String? {
+      let parts = line.split(separator: ":", maxSplits: 1)
+      guard parts.count == 2 else { return nil }
+      let text = String(parts[1].split(separator: "#")[0]).trimmingCharacters(in: .whitespaces)
+      let unquoted = text.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+      return unquoted.isEmpty ? nil : unquoted
     }
 
-    var stems: Set<String> = []
-    var inList = false
+    var translatorDictionary: String?
+    var translatorPrism: String?
+    var reverseLookupDictionary: String?
+    var section: Substring?
     for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-      let line = rawLine.trimmingCharacters(in: .whitespaces)
-      if line == "..." { break }
-      if line.hasPrefix("import_tables:") {
-        inList = true
-        let inline = line.dropFirst("import_tables:".count).trimmingCharacters(in: .whitespaces)
-        if inline.hasPrefix("["), inline.hasSuffix("]") {
-          for item in inline.dropFirst().dropLast().split(separator: ",") {
-            let stem = name(from: item)
-            if !stem.isEmpty { stems.insert(stem) }
+      if rawLine.hasPrefix(" ") || rawLine.hasPrefix("\t") {
+        guard let section else { continue }
+        let line = Substring(rawLine.trimmingCharacters(in: .whitespaces))
+        if line.hasPrefix("dictionary:") {
+          switch section {
+          case "translator": translatorDictionary = value(line)
+          case "reverse_lookup": reverseLookupDictionary = value(line)
+          default: break
           }
+        } else if section == "translator", line.hasPrefix("prism:") {
+          translatorPrism = value(line)
         }
-        continue
-      }
-      guard inList else { continue }
-      if line.hasPrefix("- ") {
-        let stem = name(from: line.dropFirst(2))
-        if !stem.isEmpty { stems.insert(stem) }
-      } else if !line.isEmpty {
-        inList = false
+      } else {
+        let line = Substring(rawLine.trimmingCharacters(in: .whitespaces))
+        if line == "..." { break }
+        guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+        section = line.firstIndex(of: ":").map { line[..<$0] }
       }
     }
-    return stems
+    return (translatorDictionary, translatorPrism, reverseLookupDictionary)
   }
 
   /// target 内的全部数据目录:每个**直接**躺着 `*.schema.yaml` 的目录都是一个

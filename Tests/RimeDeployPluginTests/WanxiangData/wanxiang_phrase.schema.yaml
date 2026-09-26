@@ -1,0 +1,6 @@
+schema:
+  schema_id: wanxiang_phrase
+  name: Wanxiang Phrase
+  version: "1"
+translator:
+  dictionary: custom_phrase

@@ -1,0 +1,7 @@
+schema:
+  schema_id: wanxiang_phrase_t9
+  name: Wanxiang Phrase T9
+  version: "1"
+translator:
+  dictionary: custom_phrase
+  prism: wanxiang_phrase_t9
