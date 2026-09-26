@@ -41,6 +41,13 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 会话选项(librime option)。
   func setOption(_ option: String, value: Bool) throws
 
+  /// varpage 页界表推送:各页起始绝对下标(严格递增)+ 候选总数;
+  /// 空表 = 恒答未知,模块退回内置 page_size 算术。
+  func updateVarPageTiles(starts: [Int], total: Int) throws
+
+  /// 摘除 varpage resolver(此后恒走内置分页)。
+  func clearVarPageResolver() throws
+
   /// 协调失效:从注册表移除并销毁底层会话(返回后该会话在引擎中已不存在)。
   /// 失效后一切事务抛 `RimeSessionError.invalidated`;消费方应丢弃引用并
   /// 按当前活跃根重建。
