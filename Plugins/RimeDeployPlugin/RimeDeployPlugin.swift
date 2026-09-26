@@ -133,6 +133,11 @@ struct RimeDeployPlugin: BuildToolPlugin {
   /// 块列表(`- 项`)与流式(`[a, b]`),到 yaml 头结束(`...`)或下一个
   /// 顶层键为止——该键的惯例写法稳定(雾凇/万象/扩展表皆同型)。
   private func importedStems(in text: String) -> Set<String> {
+    // 列表项允许行尾注释:`- dicts/zi #中文表`——名字取 `#` 之前的部分。
+    func name(from item: Substring) -> String {
+      String(item.split(separator: "#")[0]).trimmingCharacters(in: .whitespaces)
+    }
+
     var stems: Set<String> = []
     var inList = false
     for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -143,14 +148,16 @@ struct RimeDeployPlugin: BuildToolPlugin {
         let inline = line.dropFirst("import_tables:".count).trimmingCharacters(in: .whitespaces)
         if inline.hasPrefix("["), inline.hasSuffix("]") {
           for item in inline.dropFirst().dropLast().split(separator: ",") {
-            stems.insert(String(item.trimmingCharacters(in: .whitespaces)))
+            let stem = name(from: item)
+            if !stem.isEmpty { stems.insert(stem) }
           }
         }
         continue
       }
       guard inList else { continue }
       if line.hasPrefix("- ") {
-        stems.insert(String(line.dropFirst(2).trimmingCharacters(in: .whitespaces)))
+        let stem = name(from: line.dropFirst(2))
+        if !stem.isEmpty { stems.insert(stem) }
       } else if !line.isEmpty {
         inList = false
       }
