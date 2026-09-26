@@ -83,8 +83,8 @@ let package = Package(
       path: "Plugins/RimeDeployPlugin"),
     .binaryTarget(
       name: "RimeDeploy",
-      url: "https://github.com/ghostflyby/RimeKitPreBuild/releases/download/v0.1.1/RimeDeploy-v0.1.1.artifactbundle.zip",
-      checksum: "bd8fe79e802e148ebe8268d53628d89d72de4a0870dbd066c501fcd424c1a651"
+      url: "https://github.com/ghostflyby/RimeKitPreBuild/releases/download/v0.1.2/RimeDeploy-v0.1.2.artifactbundle.zip",
+      checksum: "b258d5aa06b6ea745d40d155a88b033beca7c2375473972765c6ed6b5614d4a2"
     ),
     // 插件附着到本包自己的数据目录(惯例名 + 非常规名并存),断言编译数据
     // 进 bundle、布局保留,并经 RimeKit(静态)进程内加载验证。
