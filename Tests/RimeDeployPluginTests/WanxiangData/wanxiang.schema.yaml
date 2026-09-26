@@ -1,0 +1,6 @@
+schema:
+  schema_id: wanxiang
+  name: Wanxiang
+  version: "1"
+translator:
+  dictionary: wanxiang

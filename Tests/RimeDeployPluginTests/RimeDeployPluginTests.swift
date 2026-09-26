@@ -66,6 +66,26 @@ struct RimeDeployPluginTests {
     }
   }
 
+  @Test("import_tables 布局:被导入表合并进主表,不单独产出产物")
+  func importedTablesMergeIntoMain() {
+    // WanxiangData 的主表 import 子表(dicts/zi):librime 把被导入表合并进
+    // 主表三件套——被导入表不产出任何 bin,插件也不得为它们声明预期。
+    let directory = compiledData(named: "WanxiangData")
+    #expect(
+      FileManager.default.fileExists(atPath: directory.path),
+      "插件未为 import_tables 布局产出数据目录:found \(contents(of: directory.deletingLastPathComponent()))"
+    )
+
+    let files = contents(of: directory)
+    #expect(files.contains("wanxiang.schema.yaml"), "found \(files)")
+    #expect(files.contains("wanxiang.table.bin"), "found \(files)")
+    #expect(files.contains("wanxiang.prism.bin"), "found \(files)")
+    #expect(
+      !files.contains(where: { $0.hasPrefix("zi.") || $0.hasPrefix("dicts/") }),
+      "被导入表不得单独产出:found \(files)"
+    )
+  }
+
   @Test func nestedDataKeepsItsLayout() {
     // 编译数据以单个目录声明,因此保留数据目录的布局——包括 librime 按名字
     // 解析的路径,如 `<shared>/opencc/<name>`。若逐个声明输出文件,它们会被

@@ -1,0 +1,8 @@
+---
+name: wanxiang
+version: "1"
+sort: original
+import_tables:
+  - dicts/zi
+...
+ceshi	测试
