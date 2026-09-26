@@ -18,10 +18,10 @@ extension String {
   }
 }
 
-/// C 字符串表遍历的防御上界:契约上这些表以 NULL 结尾,但实测个别引擎状态
-/// (组字标签表)在宿主并发环境下内容被破坏、终止符缺失,无界遍历即 SIGSEGV
-/// (String(cString:) 读野指针,预览进程五份崩溃报告同栈)。上界远超
-/// page_size 与标签表的实际规模,正常数据不受影响。
+/// C 字符串表遍历的防御上界:对"按个数交付"或终止符意外缺失的表,无界
+/// 的 NULL 结尾遍历会冲出数组读野指针(String(cString:) 读越界地址即
+/// SIGSEGV)。上界远超各表的实际规模,正常数据不受影响;计数已知的表
+/// (如 select_labels)应优先按个数读取而非依赖本兜底。
 private let cStringArrayWalkLimit = 64
 
 extension UnsafeMutablePointer<UnsafePointer<CChar>?> {

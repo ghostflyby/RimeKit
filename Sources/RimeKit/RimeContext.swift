@@ -24,7 +24,16 @@ extension RimeContext {
     // 空组合时下列 char* 字段为 NULL,统一按空串处理(不得强解包)。
     commitTextPreview = rawValue.commit_text_preview.map { String(cString: $0) } ?? ""
     // 空组合时 librime 不分配标签数组(nil),按空表处理。
-    selectLabels = rawValue.select_labels?.toStringArray() ?? []
+    // librime 契约(rime_api_impl.h GetContext/FreeContext):select_labels
+    // 恰为 menu.page_size 项、**无 NULL 终止符**(new char*[page_size] 只填
+    // page_size 项,FreeContext 亦按 page_size 释放)。按"读到 NULL 为止"
+    // 遍历会越界读相邻堆内存当字符串指针 → SIGSEGV(实测:万象 page_size 6
+    // + 10 个 alternative_select_labels 触发该分支,崩与宿主堆布局相关)。
+    selectLabels =
+      rawValue.select_labels.map { pointer in
+        UnsafeBufferPointer(start: pointer, count: Int(rawValue.menu.page_size))
+          .map { $0.map { String(cString: $0) } ?? "" }
+      } ?? []
   }
 }
 
