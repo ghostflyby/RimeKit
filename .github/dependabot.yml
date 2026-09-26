@@ -11,13 +11,8 @@ updates:
           - "minor"
           - "patch"
 
-  # GitHub Actions 工作流引用的 action
+  # GitHub Actions 工作流引用的 action(不分组:major 单独出 PR,便于逐个审)
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
-    groups:
-      actions-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
