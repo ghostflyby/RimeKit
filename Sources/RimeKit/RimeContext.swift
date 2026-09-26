@@ -29,10 +29,11 @@ extension RimeContext {
     // page_size 项,FreeContext 亦按 page_size 释放)。按"读到 NULL 为止"
     // 遍历会越界读相邻堆内存当字符串指针 → SIGSEGV(实测:万象 page_size 6
     // + 10 个 alternative_select_labels 触发该分支,崩与宿主堆布局相关)。
-    selectLabels = rawValue.select_labels.map { pointer in
-      UnsafeBufferPointer(start: pointer, count: Int(rawValue.menu.page_size))
-        .map { $0.map { String(cString: $0) } ?? "" }
-    } ?? []
+    selectLabels =
+      rawValue.select_labels.map { pointer in
+        UnsafeBufferPointer(start: pointer, count: Int(rawValue.menu.page_size))
+          .map { $0.map { String(cString: $0) } ?? "" }
+      } ?? []
   }
 }
 
