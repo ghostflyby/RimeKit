@@ -52,10 +52,39 @@ public distributed actor Rime {
 
   internal let rimeApi: RimeApi
   internal var opaque: Box?
+  // MARK: varpage 引擎实现
+
+  /// 注册(首次)并重推页界表。调用在 actor 串行域内;resolver 虽从
+  /// 引擎按键路径直入,仍以锁保护(box 自守),双保险。
+  internal func engineVarPageUpdateTiles(
+    starts: [Int], total: Int, for sessionID: RimeSessionID
+  ) throws(RimeError) {
+    let box: VarPageTileBox
+    if let existing = varPageBoxes[sessionID] {
+      box = existing
+    } else {
+      box = VarPageTileBox()
+      guard RimeVarPageModule.installResolver(for: sessionID, box: box) else {
+        throw RimeError.apiUnavailable("varpage")
+      }
+      varPageBoxes[sessionID] = box
+    }
+    box.update(starts: starts, total: total)
+  }
+
+  internal func engineVarPageClear(for sessionID: RimeSessionID) throws(RimeError) {
+    guard varPageBoxes[sessionID] != nil else { return }
+    _ = RimeVarPageModule.clearResolver(for: sessionID)
+  }
+
   internal static let cStringBufferSize = 1024
   internal let cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
   internal var configs: [ObjectHandle<RimeConfig>: rime_config_t] = [:]
   internal var configIterators: [ObjectHandle<RimeConfigIterator>: rime_config_iterator_t] = [:]
+  /// varpage 页界表:会话 → tile 表。box 随进程存活(会话数有界),
+  /// C 侧 passUnretained 持续有效——头文件的 user_data 生命周期契约。
+  internal var varPageBoxes: [RimeSessionID: VarPageTileBox] = [:]
+
   internal var candidateIterators: [ObjectHandle<RimeCandidate>: rime_candidate_list_iterator_t] =
     [:]
 
@@ -282,6 +311,22 @@ public distributed actor Rime {
     _ property: String, value: String, for sessionID: RimeSessionID
   ) async throws(RimeError) {
     rimeApi.set_property(sessionID.rawValue, property, value)
+  }
+
+  // MARK: varpage 动态页长(封装见 Extensions/VarPage.swift)
+
+  /// 推送页界表(各页起始绝对下标,严格递增 + 候选总数)。首次调用即对
+  /// 会话注册 resolver;空表 = 对任意下标答"未知",模块退回内置
+  /// page_size 算术。声明须落本文件(@XPCService 元数据白表)。
+  public distributed func varPageUpdateTiles(
+    starts: [Int], total: Int, for sessionID: RimeSessionID
+  ) async throws(RimeError) {
+    try engineVarPageUpdateTiles(starts: starts, total: total, for: sessionID)
+  }
+
+  /// 摘除会话的 varpage resolver(此后恒走内置分页)。会话销毁亦自动摘。
+  public distributed func varPageClear(for sessionID: RimeSessionID) async throws(RimeError) {
+    try engineVarPageClear(for: sessionID)
   }
 
   // MARK: Schema

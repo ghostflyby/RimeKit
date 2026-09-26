@@ -39,7 +39,7 @@ let package = Package(
     // bundled(默认)在下方;system(不 bundle,纯模块声明,链接与 embed 由 Xcode
     // 工程自管)切换为下一行,详见 README「librime 引入形态」。
     .package(
-      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.0.1"),
+      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.0.3"),
     // .package(path: "Support/librime-system"),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
