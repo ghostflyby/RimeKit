@@ -78,24 +78,22 @@ final class VarPageTileBox: @unchecked Sendable {
   /// 查询下标所在页。表外下标 → nil(varpage 契约:整键回退内置算术)。
   ///
   /// 翻页识别状态机:翻页动作在同一事务内查询两次(选中页 + 边界页),
-  /// 两次落在不同行;选中动作只查一次。第二次查询即判定翻页:位闭则
-  /// 翻位开卷轴,且 PageDown 方向以「延长当前行到边界」作答——模块落点
-  /// = 行首 + 原偏移 = 原高亮,净效果**只展开、候选不动**;PageUp 方向
-  /// 按已记录序列回溯上一行。
+  /// 两次落在不同行;选中动作只查一次。第二次查询即判定翻页,位闭则置
+  /// 卷轴位(宿主事务后回读展开),页界**恒按表瓦片正常作答**——新版
+  /// varpage(lib ≥ 1.17.0-pack.9.0.4)允许翻页到任意目标含不动,引擎
+  /// 自由翻页 offset carry 的落点 = 原高亮,即「首翻页只展开、候选不动」
+  /// 由答案本身保证,不产瓦片重叠页。曾以「延长当前行到边界」作答,
+  /// 该页与网格表重叠:旧版遭防倒退拒答回落内置算术(高亮跳一页)且
+  /// 引擎翻页状态被污染(宿主观感 = 打字卡死),已弃——重叠页无论引擎
+  /// 接受与否都没有收益,答案恒取表页。
   func page(of index: Int) -> (start: Int, length: Int)? {
     lock.lock()
     defer { lock.unlock() }
     guard let row = rowRange(index: index) else { return nil }
     let pageTurn = lastQueryStart != nil && lastQueryStart != row.start
-    let previousStart = lastQueryStart
-    let wasOpen = open
     lastQueryStart = row.start
-    if pageTurn, !wasOpen {
+    if pageTurn, !open {
       open = true
-      if index > (previousStart ?? index) {
-        // 翻位键为前向:延长当前行到边界下标,落点 = 原高亮。
-        return (previousStart ?? row.start, index - (previousStart ?? row.start) + 1)
-      }
     }
     return (row.start, row.end - row.start)
   }
