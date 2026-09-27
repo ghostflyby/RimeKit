@@ -9,38 +9,48 @@ let package = Package(
     .macOS(.v15),
     .iOS(.v16),
   ],
+  // 下游 librime 链接选型:显式 product 矩阵。互斥靠约定——同一最终链接镜像
+  // 只挂一个变体,混挂会同时引入两份 librime 链接通道(traits 时代由包级
+  // 解析机制保证,product 化后降为文档约定,见 README)。裸名 RimeKit 是
+  // RimeKitStub 的别名:既有消费者零迁移,新消费者请用显式名。
   products: [
+    // Stub(默认):经 RimeDynamicStub 桩以 -framework RimeDynamic 链接
+    // (tbd,零二进制分发),真实框架的 embed 形态由下游决定(单副本嵌入 +
+    // 子 bundle 经 runpath 解析)。
     .library(
       name: "RimeKit",
-      targets: ["RimeKit"]),
+      targets: ["RimeKit", "RimeC", "RimeKitLinkageStub"]),
+    .library(
+      name: "RimeKitStub",
+      targets: ["RimeKit", "RimeC", "RimeKitLinkageStub"]),
+    // Dynamic:直挂真 RimeDynamic,SwiftPM 把框架嵌入每个链接它的 bundle
+    // (含 XPC 的宿主会每 bundle 一份副本,勿用于 XPC 场景)。
+    .library(
+      name: "RimeKitDynamic",
+      targets: ["RimeKit", "RimeC", "RimeKitLinkageDynamic"]),
+    // Static:librime(含依赖)静态并入每个链接 RimeKit 的最终产物,
+    // 无需 embed 任何框架、无运行期查找。
+    .library(
+      name: "RimeKitStatic",
+      targets: ["RimeKit", "RimeC", "RimeKitLinkageStatic"]),
+    // System:无锚——SwiftPM 不参与 librime 链接,头文件只供编译,符号解析
+    // 完全由最终链接方决定(Xcode 工程自管链接与 embed;swift 命令行经
+    // LIBRARY_PATH)。
+    .library(
+      name: "RimeKitSystem",
+      targets: ["RimeKit", "RimeC"]),
     .plugin(
       name: "RimeDeployPlugin",
       targets: ["RimeDeployPlugin"]),
   ],
-  traits: [
-    // 下游 librime 链接选型(SE-0450):消费方在 .package(traits:) 显式列出即取代
-    // 默认集(.default 不再传递),两个 trait 同开会链接期符号冲突,二选一。
-    // 消费方缺省(不写 traits)时传递 .defaults 标记 → 启用 librimeDynamic:
-    // RimeKit 的动态产品变体(Xcode 测试构建对宿主/测试共享的产品强制生成)
-    // 经 RimeDynamicStub 桩以 -framework RimeDynamic 链接(tbd,零二进制分发),
-    // 真实框架的 embed 形态由下游决定(单副本嵌入 + 子 bundle 经 runpath 解析)。
-    .default(enabledTraits: ["librimeDynamic"]),
-    .trait(name: "librimeDynamic"),
-    // librimeStatic:librime 静态并入每个链接 RimeKit 的最终产物,
-    // 下游无需另挂任何 librime 二进制。
-    .trait(name: "librimeStatic"),
-  ],
   dependencies: [
-    // librime-xcframework 的 product 拆分:Rime = 纯头模块(唯一模块提供者,零二进制下载);
-    // RimeDynamic/RimeStatic = 无模块二进制(动态框架/静态库);RimeDynamicStub =
-    // tbd 框架桩(只链接不嵌);RimeSystem = pkg-config 系统库(模块同为 Rime,
-    // 不可与本包同依赖图)。二进制产物进链接的通道由上方 traits 选型决定。
-    // librime 引入形态二选一(product/target/模块名两侧一致,RimeKit 源码零改动):
-    // bundled(默认)在下方;system(不 bundle,纯模块声明,链接与 embed 由 Xcode
-    // 工程自管)切换为下一行,详见 README「librime 引入形态」。
+    // librime-xcframework 的 product 拆分:Rime = 纯头模块(唯一模块提供者,零
+    // 二进制下载,全部形态共用的编译面);RimeDynamic/RimeStatic = 无模块二进制
+    // (动态框架/静态库);RimeDynamicStub = tbd 框架桩(只链接不嵌)。二进制产物
+    // 进链接的通道由上方 products 选型决定:每种形态一个"链接锚"target 把对应的
+    // librime 二进制拖进链接闭包,System 形态无锚(链接外置)。
     .package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.1.0"),
-    // .package(path: "Support/librime-system"),
     // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
     .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.1")
@@ -53,17 +63,6 @@ let package = Package(
       name: "RimeC",
       dependencies: [
         .product(name: "Rime", package: "librime-xcframework"),
-        .product(
-          name: "RimeDynamicStub", package: "librime-xcframework",
-          condition: .when(traits: ["librimeDynamic"])),
-        .product(
-          name: "RimeStatic", package: "librime-xcframework",
-          condition: .when(traits: ["librimeStatic"])),
-      ],
-      linkerSettings: [
-        // 静态 librime 为 C++ 产物,不携带 C++ 运行时;仅在静态选型下随 RimeKit
-        // 传播 -lc++(动态选型经 RimeDynamic.framework 自带,无需此设置)。
-        .linkedLibrary("c++", .when(traits: ["librimeStatic"])),
       ]),
     .target(
       name: "RimeKit",
@@ -72,6 +71,28 @@ let package = Package(
         .product(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS]))
+      ]),
+    // 链接锚:除占位注释外不含任何代码,唯一职责是把对应形态的 librime 二进制
+    // 拖进链接闭包(见 products 注释)。Static 锚一并传播 -lc++——静态 librime
+    // 为 C++ 产物,不携带 C++ 运行时;动态形态经 RimeDynamic.framework 自带,
+    // 无需此设置。
+    .target(
+      name: "RimeKitLinkageStub",
+      dependencies: [
+        .product(name: "RimeDynamicStub", package: "librime-xcframework")
+      ]),
+    .target(
+      name: "RimeKitLinkageDynamic",
+      dependencies: [
+        .product(name: "RimeDynamic", package: "librime-xcframework")
+      ]),
+    .target(
+      name: "RimeKitLinkageStatic",
+      dependencies: [
+        .product(name: "RimeStatic", package: "librime-xcframework")
+      ],
+      linkerSettings: [
+        .linkedLibrary("c++")
       ]),
     // 构建期部署插件:执行 RimeKitPreBuild 发布的预构建静态工具——二进制
     // 自包含(静态内嵌 librime),零动态框架依赖,对构建器与目的地免疫;
