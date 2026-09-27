@@ -54,8 +54,8 @@ public distributed actor Rime {
   internal var opaque: Box?
   // MARK: varpage 引擎实现
 
-  /// 注册(首次)并重推页界表。调用在 actor 串行域内;resolver 虽从
-  /// 引擎按键路径直入,仍以锁保护(box 自守),双保险。
+  /// 注册(首次)并重推累积行起点序列。调用在 actor 串行域内;resolver
+  /// 虽从引擎按键路径直入,仍以锁保护(box 自守),双保险。
   internal func engineVarPageUpdateTiles(
     starts: [Int], total: Int, for sessionID: RimeSessionID
   ) throws(RimeError) {
@@ -63,13 +63,30 @@ public distributed actor Rime {
     if let existing = varPageBoxes[sessionID] {
       box = existing
     } else {
-      box = VarPageTileBox()
+      box = VarPageTileBox(sessionID: sessionID)
       guard RimeVarPageModule.installResolver(for: sessionID, box: box) else {
         throw RimeError.apiUnavailable("varpage")
       }
       varPageBoxes[sessionID] = box
     }
     box.update(starts: starts, total: total)
+  }
+
+  internal func engineVarPageIsOpen(for sessionID: RimeSessionID) throws(RimeError) -> Bool {
+    guard let box = varPageBoxes[sessionID] else { return false }
+    return box.isOpen()
+  }
+
+  internal func engineVarPageReset(for sessionID: RimeSessionID) throws(RimeError) {
+    guard let box = varPageBoxes[sessionID] else { return }
+    box.reset()
+    _ = RimeVarPageModule.clearResolver(for: sessionID)
+  }
+
+  internal func engineVarPageHighlight(index: Int, for sessionID: RimeSessionID) throws(RimeError) {
+    guard rimeApi.highlight_candidate(sessionID.rawValue, index) else {
+      throw RimeError.invalidArgument("highlight_candidate(\(index))")
+    }
   }
 
   internal func engineVarPageClear(for sessionID: RimeSessionID) throws(RimeError) {
@@ -322,6 +339,27 @@ public distributed actor Rime {
     starts: [Int], total: Int, for sessionID: RimeSessionID
   ) async throws(RimeError) {
     try engineVarPageUpdateTiles(starts: starts, total: total, for: sessionID)
+  }
+
+  /// 回读卷轴位:翻页动作在引擎侧 resolver 翻位,宿主事务后读取跟随。
+  public distributed func varPageIsOpen(
+    for sessionID: RimeSessionID
+  ) async throws(RimeError) -> Bool {
+    try engineVarPageIsOpen(for: sessionID)
+  }
+
+  /// 换组字重置:位闭、清累积序列与查询识别状态。
+  public distributed func varPageReset(
+    for sessionID: RimeSessionID
+  ) async throws(RimeError) {
+    try engineVarPageReset(for: sessionID)
+  }
+
+  /// 高亮指定候选(不选词):首翻页键「只展开不动候选」的回滚件。
+  public distributed func varPageHighlight(
+    index: Int, for sessionID: RimeSessionID
+  ) async throws(RimeError) {
+    try engineVarPageHighlight(index: index, for: sessionID)
   }
 
   /// 摘除会话的 varpage resolver(此后恒走内置分页)。会话销毁亦自动摘。

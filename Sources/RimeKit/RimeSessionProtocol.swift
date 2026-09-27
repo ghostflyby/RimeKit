@@ -41,9 +41,18 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 会话选项(librime option)。
   func setOption(_ option: String, value: Bool) throws
 
-  /// varpage 页界表推送:各页起始绝对下标(严格递增)+ 候选总数;
-  /// 空表 = 恒答未知,模块退回内置 page_size 算术。
+  /// varpage 累积行起点序列推送:各页起始绝对下标(严格递增)+ 实测
+  /// 包络终点;空表 = 引擎侧翻页退回内置 page_size 算术。
   func updateVarPageTiles(starts: [Int], total: Int) throws
+
+  /// 回读卷轴位:翻页动作在引擎侧 resolver 翻位,宿主事务后读取跟随。
+  func varPageIsOpen() throws -> Bool
+
+  /// 换组字重置:位闭、清累积序列。
+  func varPageReset() throws
+
+  /// 高亮指定候选(不选词):首翻页键「只展开不动候选」的回滚件。
+  func varPageHighlight(index: Int) throws
 
   /// 摘除 varpage resolver(此后恒走内置分页)。
   func clearVarPageResolver() throws
