@@ -31,6 +31,8 @@ jobs:
         run: swift test --no-parallel
 
   # iOS 目标构建:库 + 测试目标(iOS 16 地板;generic 目的地无需模拟器设备)
+  # scheme 用 -Package 聚合:product 矩阵后 Xcode 按产物各自生成 scheme,
+  # 同名产品 scheme 不含测试动作(测试动作为空,xcodebuild test 直接报错)。
   ios-build:
     name: iOS · build
     runs-on: macos-latest
@@ -40,7 +42,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild build-for-testing \
-            -scheme RimeKit \
+            -scheme RimeKit-Package \
             -destination 'generic/platform=iOS Simulator' \
             -skipMacroValidation -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
@@ -60,7 +62,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -scheme RimeKit \
+            -scheme RimeKit-Package \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
