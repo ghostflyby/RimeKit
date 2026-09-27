@@ -67,4 +67,4 @@ jobs:
             -skip-testing:RimeDeployToolTests \
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
-            2>&1 | tail -40
+            2>&1
