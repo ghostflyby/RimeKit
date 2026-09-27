@@ -72,14 +72,33 @@ jobs:
       #   引导期静默退出码 1,xcresult 钉死 target;Xcode 27 本地全绿)。迁回后
       #   插件工具为源码构建 target,疑触发该栈的 runner 准备缺陷;macOS 全量
       #   覆盖插件+工具逻辑,iOS 保留引擎 81 项 + 工具占位。待上游排查后回收。
-      - name: Crash diagnostics (failure only)
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics
+          XCR=$(ls -td ~/Library/Developer/Xcode/DerivedData/RimeKit-*/Logs/Test/*.xcresult 2>/dev/null | head -1)
+          if [ -n "$XCR" ]; then
+            echo "xcresult: $XCR"
+            cp -R "$XCR" diagnostics/ || true
+            xcrun xcresulttool get test-results summary --path "$XCR" \
+              > diagnostics/test-summary.json 2>&1 || true
+          fi
+          cp ~/Library/Logs/DiagnosticReports/*.ips diagnostics/ 2>/dev/null || true
+          ls -la diagnostics
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-diagnostics
+          path: diagnostics
+          if-no-files-found: warn
+      - name: Failure diagnostics dump
         if: failure()
         run: |
           XCR=$(ls -td ~/Library/Developer/Xcode/DerivedData/RimeKit-*/Logs/Test/*.xcresult 2>/dev/null | head -1)
           echo "== xcresult: $XCR =="
           xcrun xcresulttool get test-results summary --path "$XCR" || true
           echo "== DiagnosticReports =="
-          ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null || echo "(none)"
           for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -4); do
             echo "===== $f ====="
             cat "$f"
