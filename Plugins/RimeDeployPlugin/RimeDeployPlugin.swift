@@ -136,7 +136,7 @@ struct RimeDeployPlugin: BuildToolPlugin {
       displayName: "Compiling Rime data \(name) in \(target.name)",
       executable: tool.url,
       arguments: arguments,
-      // 工具随本包源码构建,librime 动态框架经构建系统 rpath 解析,无需环境变量。
+      // 工具随本包源码构建并静态自包含,不随消费方的 product 选型变化,无需环境变量。
       inputFiles: inputFiles,
       outputFiles: [outputDirectory]
     )

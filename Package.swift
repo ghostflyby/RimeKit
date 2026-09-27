@@ -95,10 +95,9 @@ let package = Package(
         .linkedLibrary("c++")
       ]),
     // 构建期部署插件:驱动本包内的 RimeDeploy 可执行(源码随包构建)。
-    // 工具自身经 RimeKitLinkageDynamic 锚直挂动态 librime,构建产物经构建
-    // 系统 rpath 解析,对消费方自身的产品选型零传染(product 按边选型,
-    // traits 时代的交叉污染不复存在;PreBuild 独立仓库与 artifactbundle
-    // 分发随之退役)。
+    // 工具自身经 RimeKitLinkageStatic 锚静态自包含——Xcode/DerivedData 语境
+    // 下框架不随插件工具落盘,动态链接仅 swift build 可解析(CI 实证);
+    // PreBuild 独立仓库与 artifactbundle 分发随之退役。
     .plugin(
       name: "RimeDeployPlugin",
       capability: .buildTool(),
@@ -106,14 +105,14 @@ let package = Package(
       path: "Plugins/RimeDeployPlugin"),
     // 构建期部署工具(原 RimeKitPreBuild 独立仓库,product 矩阵落地后迁回):
     // 引擎驱动走进程内 RimeKit API(setup/initializeDeployer/prebuild/
-    // deploy/finalize + logsink 错误收集),工具自身直挂 Dynamic 锚——动态
-    // librime 框架随构建产物落盘、由构建系统 rpath 解析,工具进程不再需要
-    // 静态自包含。
+    // deploy/finalize + logsink 错误收集),工具自身直挂 Static 锚——构建工具
+    // 必须对构建器与目的地免疫,且 Xcode 语境下动态框架不随工具落盘(CI
+    // 实证;Dynamic 锚仅 swift build 布局可解析)。
     .target(
       name: "RimeDeployCore",
       dependencies: [
         "RimeKit",
-        "RimeKitLinkageDynamic",
+        "RimeKitLinkageStatic",
       ]),
     // 命令行外壳:解析 argv、执行、报告。全部逻辑在库里以便测试直接调用。
     .executableTarget(
