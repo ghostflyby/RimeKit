@@ -94,21 +94,35 @@ let package = Package(
       linkerSettings: [
         .linkedLibrary("c++")
       ]),
-    // 构建期部署插件:执行 RimeKitPreBuild 发布的预构建静态工具——二进制
-    // 自包含(静态内嵌 librime),零动态框架依赖,对构建器与目的地免疫;
-    // 工具版本由下方 binaryTarget 的 url+checksum 钉死,经 bump 工作流更新。
+    // 构建期部署插件:驱动本包内的 RimeDeploy 可执行(源码随包构建)。
+    // 工具自身经 RimeKitLinkageDynamic 锚直挂动态 librime,构建产物经构建
+    // 系统 rpath 解析,对消费方自身的产品选型零传染(product 按边选型,
+    // traits 时代的交叉污染不复存在;PreBuild 独立仓库与 artifactbundle
+    // 分发随之退役)。
     .plugin(
       name: "RimeDeployPlugin",
       capability: .buildTool(),
       dependencies: ["RimeDeploy"],
       path: "Plugins/RimeDeployPlugin"),
-    .binaryTarget(
+    // 构建期部署工具(原 RimeKitPreBuild 独立仓库,product 矩阵落地后迁回):
+    // 引擎驱动走进程内 RimeKit API(setup/initializeDeployer/prebuild/
+    // deploy/finalize + logsink 错误收集),工具自身直挂 Dynamic 锚——动态
+    // librime 框架随构建产物落盘、由构建系统 rpath 解析,工具进程不再需要
+    // 静态自包含。
+    .target(
+      name: "RimeDeployCore",
+      dependencies: [
+        "RimeKit",
+        "RimeKitLinkageDynamic",
+      ]),
+    // 命令行外壳:解析 argv、执行、报告。全部逻辑在库里以便测试直接调用。
+    .executableTarget(
       name: "RimeDeploy",
-      url: "https://github.com/ghostflyby/RimeKitPreBuild/releases/download/v0.1.2/RimeDeploy-v0.1.2.artifactbundle.zip",
-      checksum: "b258d5aa06b6ea745d40d155a88b033beca7c2375473972765c6ed6b5614d4a2"
-    ),
+      dependencies: [
+        "RimeDeployCore",
+      ]),
     // 插件附着到本包自己的数据目录(惯例名 + 非常规名并存),断言编译数据
-    // 进 bundle、布局保留,并经 RimeKit(静态)进程内加载验证。
+    // 进 bundle、布局保留,并经 RimeKit 进程内加载验证。
     .testTarget(
       name: "RimeDeployPluginTests",
       dependencies: [
@@ -118,6 +132,13 @@ let package = Package(
       path: "Tests/RimeDeployPluginTests",
       exclude: ["RimeData", "MyRimeData", "WanxiangData"],
       plugins: [.plugin(name: "RimeDeployPlugin")]),
+    .testTarget(
+      name: "RimeDeployToolTests",
+      dependencies: [
+        "RimeDeployCore",
+        // 冒烟用例 spawn 真实二进制:依赖可执行 target 使其随测试构建落盘。
+        "RimeDeploy",
+      ]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
