@@ -134,10 +134,11 @@ let package = Package(
       plugins: [.plugin(name: "RimeDeployPlugin")]),
     .testTarget(
       name: "RimeDeployToolTests",
+      // 只挂 Core:领域矩阵进程内调用;可执行 target 不可再作测试依赖——
+      // 它同时是插件宿主工具(native 布局下两份 .o 并入同一测试包链接,
+      // 符号成对重复)。真实工具执行的合约由 RimeDeployPluginTests 覆盖。
       dependencies: [
         "RimeDeployCore",
-        // 冒烟用例 spawn 真实二进制:依赖可执行 target 使其随测试构建落盘。
-        "RimeDeploy",
       ]),
     .testTarget(
       name: "RimeKitTests",

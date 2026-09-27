@@ -5,11 +5,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// 本 suite 用 `Process` spawn 真实可执行文件,而 `Process` 在 iOS 上不存在
-// (SDK 层面不可用),整个文件以 macOS 为限——部署工具是构建宿主的构件,iOS
-// 测试构建里它编译为空,零用例运行。
-//
-// 用例分两层:
+// 部署测试以 `Process` 依赖 macOS,整个文件以 macOS 为限——部署工具是构建宿主
+// 的构件,iOS 测试构建里它编译为空,零用例运行。
 //
 // 领域矩阵(退出测试):`#expect(processExitsWith:)` 重新唤起一个**全新子进程**
 // 执行闭包——夹具在闭包内生成,`runRimeDeploy` 进程内直接调用(含 Rime 初始化)。
@@ -18,31 +15,18 @@
 // 用例之间零共享——这是并行安全的依据。早期经进程级环境变量给闭包传可执行文件
 // 路径与参数的实现正因并行互相覆盖而废弃;如今的修法是废除通道本身,而非换一条。
 //
-// 冒烟(spawn 真实二进制):插件真正消费的合约只有进程形态的——二进制可启动
-// (traits 跟随的动态链接可解析)、argv 与退出码/stderr。两个用例保住这一层,
-// 领域语义不在此重复。
+// 旧独立仓库时代另有 spawn 独立二进制的冒烟层,验证 artifactbundle 分发物的
+// 进程合约;迁回本包后该层由 RimeDeployPluginTests 天然覆盖——插件构建命令
+// 驱动的就是真实工具二进制,且经由消费方唯一会走的路径。
 
 #if os(macOS)
   import Foundation
   import RimeDeployCore
   import Testing
 
-  extension Tag {
-    /// 冒烟层的选型标:spawn 真实二进制的进程合约用例,可经 --tag 单独选中或排除。
-    @Tag static var smoke: Self
-  }
-
   /// 一份健康夹具编译出的全部产物(相对 out 目录,排序后)。
   private let probeArtifacts = [
     "probe.prism.bin", "probe.reverse.bin", "probe.schema.yaml", "probe.table.bin",
-  ]
-
-  /// 断言上述产物的命令行形态(逐个 --expect)。
-  private let probeExpectationArguments = [
-    "--expect", "probe.schema.yaml",
-    "--expect", "probe.table.bin",
-    "--expect", "probe.prism.bin",
-    "--expect", "probe.reverse.bin",
   ]
 
   /// 子进程内的夹具准备:全新目录 + 一份确实能编译的 schema 与词典,
@@ -270,104 +254,6 @@
     }
   }
 
-  // MARK: - 冒烟
-
-  @Suite("冒烟:spawn 真实二进制,看门启动(动态链接可解析)、argv 与退出码/stderr 合约", .tags(.smoke))
-  struct RimeDeploySmokeTests {
-    /// 一次运行的结果。
-    struct ToolRun {
-      let status: Int32
-      let standardError: String
-
-      var succeeded: Bool { status == 0 }
-    }
-
-    private func run(_ fixture: ToolFixture, arguments: [String]) throws -> ToolRun {
-      let process = Process()
-      process.executableURL = try ToolEnvironment.executableURL()
-      process.arguments = arguments
-      let errorPipe = Pipe()
-      process.standardError = errorPipe
-      process.standardOutput = Pipe()
-      try process.run()
-      // 先读再等:管道写满会反过来阻塞子进程。
-      let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-      process.waitUntilExit()
-      return ToolRun(
-        status: process.terminationStatus,
-        standardError: String(decoding: errorData, as: UTF8.self))
-    }
-
-    @Test("看门:健康数据编译成功——退出码 0,stderr 给出产物汇总")
-    func compilesHealthyData() throws {
-      let fixture = try ToolFixture.make()
-      defer { fixture.remove() }
-      try fixture.writeHealthyData()
-
-      let run = try run(fixture, arguments: fixture.arguments(probeExpectationArguments))
-
-      #expect(run.succeeded, "stderr was:\n\(run.standardError)")
-      #expect(
-        run.standardError.contains("deployed 4 artifact(s)"),
-        "stderr was:\n\(run.standardError)")
-    }
-
-    @Test("看门:部署失败退出码非零,stderr 给出失败信息")
-    func rejectsUnresolvableInclude() throws {
-      let fixture = try ToolFixture.make()
-      defer { fixture.remove() }
-      try fixture.writeHealthyData()
-      try fixture.append(
-        "\n__include: nowhere.yaml\n",
-        to: fixture.data.appendingPathComponent("probe.schema.yaml"))
-
-      let run = try run(
-        fixture, arguments: fixture.arguments(["--expect", "probe.schema.yaml"]))
-
-      #expect(!run.succeeded)
-      #expect(
-        run.standardError.contains("unresolved dependency"),
-        "stderr was:\n\(run.standardError)")
-    }
-  }
-
-  /// 工具在哪,以及一次测试用完即弃的目录。
-  enum ToolEnvironment {
-    /// 工具的可执行文件,作为本 target 的依赖构建出来。
-    ///
-    /// `swift test` 把它放在产品目录(测试运行器所在处);`RIME_DEPLOY` 覆盖该
-    /// 位置,供在别处构建它的调用方使用。
-    static func executableURL() throws -> URL {
-      if let override = ProcessInfo.processInfo.environment["RIME_DEPLOY"] {
-        let url = URL(fileURLWithPath: override)
-        guard FileManager.default.isExecutableFile(atPath: url.path) else {
-          throw ToolNotFound("RIME_DEPLOY is not executable: \(url.path)")
-        }
-        return url
-      }
-      // `Bundle.module` 在此不可用——本 target 未声明资源,SwiftPM 不生成访问器;
-      // `Bundle.main` 是测试运行器,不是产品目录。`Bundle(for:)` 需要一个定义在
-      // 本 target 内的类(用 Foundation 的类会解析到 Foundation 自己的 bundle),
-      // 而 suite 是 struct,故有下方的标记类。
-      let productsDirectory = Bundle(for: BundleMarker.self)
-        .bundleURL.deletingLastPathComponent()
-      let candidate = productsDirectory.appendingPathComponent("RimeDeploy")
-      guard FileManager.default.isExecutableFile(atPath: candidate.path) else {
-        throw ToolNotFound(
-          "no RimeDeploy next to the test bundle at \(productsDirectory.path)")
-      }
-      return candidate
-    }
-
-    struct ToolNotFound: Error, CustomStringConvertible {
-      let description: String
-      init(_ description: String) { self.description = description }
-    }
-  }
-
-  /// 属于本 target 的类,供 `Bundle(for:)` 定位其 bundle。
-  private final class BundleMarker {}
-
   /// 一次测试用完即弃的目录。
   struct ToolFixture {
     let root: URL
@@ -424,11 +310,6 @@
 
     func files(in directory: URL) -> [String] {
       relativeFilePaths(in: directory.path).sorted()
-    }
-
-    /// 针对这些目录应当传给工具的参数。
-    func arguments(_ extra: [String] = []) -> [String] {
-      ["--data-dir", data.path, "--out-dir", out.path, "--work-dir", work.path] + extra
     }
 
     /// 针对这些目录的部署请求(退出测试进程内直接调用)。
