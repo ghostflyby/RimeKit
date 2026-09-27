@@ -133,11 +133,15 @@ let package = Package(
       plugins: [.plugin(name: "RimeDeployPlugin")]),
     .testTarget(
       name: "RimeDeployToolTests",
-      // 只挂 Core:领域矩阵进程内调用;可执行 target 不可再作测试依赖——
-      // 它同时是插件宿主工具(native 布局下两份 .o 并入同一测试包链接,
-      // 符号成对重复)。真实工具执行的合约由 RimeDeployPluginTests 覆盖。
+      // 只挂 Core 且仅 macOS:领域矩阵进程内调用,整文件 os(macOS) 限定,iOS
+      // 恒为零用例——依赖零条件化会把 RimeStatic/C++ 拖进 iOS 测试包且无意义。
+      // 可执行 target 亦不可作测试依赖:它同时是插件宿主工具(native 布局下
+      // 两份 .o 并入同一测试包链接,符号成对重复)。真实工具执行的合约由
+      // RimeDeployPluginTests 覆盖。
       dependencies: [
-        "RimeDeployCore",
+        .target(
+          name: "RimeDeployCore",
+          condition: .when(platforms: [.macOS])),
       ]),
     .testTarget(
       name: "RimeKitTests",
