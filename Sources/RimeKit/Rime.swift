@@ -725,6 +725,25 @@ public distributed actor Rime {
     return try assembleOutcome(handled: handled, for: session)
   }
 
+  /// 批量候选页:从指定下标起服务端迭代组装一批候选,**一次往返返回**
+  /// (宿主逐条 advance 是 N 次分布式往返,快速输入时把根 actor 占满、
+  /// 键事务排队在后 = 宿主卡顿/系统超时丢组字)。到批量前迭代自然耗尽
+  /// 即短批返回;起点越界返回空表。
+  public distributed func candidatesPage(
+    fromIndex: Int32, count: Int32, for sessionID: RimeSessionID
+  ) async throws(RimeError) -> [RimeCandidate] {
+    guard let iterator = try engineCandidateList(fromIndex: fromIndex, for: sessionID) else {
+      return []
+    }
+    defer { try? engineEndCandidateIterator(iterator) }
+    var items: [RimeCandidate] = []
+    items.reserveCapacity(Int(count))
+    while Int32(items.count) < count, let candidate = try engineAdvanceCandidateIterator(iterator) {
+      items.append(candidate)
+    }
+    return items
+  }
+
   /// 弹性候选事务:全量候选枚举(句柄迭代器在本 actor 内同步推进)+ 引擎
   /// 高亮换算为全省下标,一次往返返回。非组字态返回空列表。
   public distributed func candidatesTransaction(

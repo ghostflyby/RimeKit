@@ -60,6 +60,25 @@ import Testing
     #expect(handled == true)
     #expect(open == false)
   }
+
+  @Test(arguments: RimeBackend.allCases)
+  func candidatesPageBatchAssembly(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    _ = try await session.typeKeys("mmmm")
+
+    // 一次往返取一批:满批/短批/越界。
+    let root = env.root
+    let full = try await root.candidatesPage(
+      fromIndex: 0, count: 5, for: session.sessionID)
+    #expect(full.map(\.text) == Array(MinimalRimeData.mmmmCandidates.prefix(5)))
+    let short = try await root.candidatesPage(
+      fromIndex: 9, count: 5, for: session.sessionID)
+    #expect(short.map(\.text) == Array(MinimalRimeData.mmmmCandidates.suffix(3)))
+    let beyond = try await root.candidatesPage(
+      fromIndex: 12, count: 5, for: session.sessionID)
+    #expect(beyond.isEmpty)
+  }
 }
 
 /// 页答案断言(optional 命名元组无提升 ==,经 helper 展开比较)。
