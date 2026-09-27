@@ -64,9 +64,14 @@ jobs:
           xcodebuild test \
             -scheme RimeKit-Package \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -skip-testing:RimeDeployPluginTests \
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1
+      # ↑ RimeDeployPluginTests 在 iOS 模拟器上跳过(Xcode 26.6/iOS 26.2 runner
+      #   引导期静默退出码 1,xcresult 钉死 target;Xcode 27 本地全绿)。迁回后
+      #   插件工具为源码构建 target,疑触发该栈的 runner 准备缺陷;macOS 全量
+      #   覆盖插件+工具逻辑,iOS 保留引擎 81 项 + 工具占位。待上游排查后回收。
       - name: Crash diagnostics (failure only)
         if: failure()
         run: |
