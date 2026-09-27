@@ -674,6 +674,9 @@ public distributed actor Rime {
   public distributed func keyTransaction(
     keyCode: Int32, modifierMask: Int32, for session: RimeSessionID
   ) async throws(RimeError) -> RimeKeyTransactionResult {
+    // 事务边界重置翻页识别残留:跨事务的单次查询(选键等)残留会把本
+    // 事务的首次页查询误判为翻页第二段(误置卷轴位/误触原位答)。
+    varPageBoxes[session]?.beginTurnDetection()
     let handled = try engineProcessKey(
       keyCode: keyCode, modifierMask: modifierMask, for: session)
     return try assembleOutcome(handled: handled, for: session)
