@@ -79,23 +79,37 @@ final class VarPageTileBox: @unchecked Sendable {
   ///
   /// 翻页识别状态机:翻页动作在同一事务内查询两次(选中页 + 边界页),
   /// 两次落在不同行;选中动作只查一次。第二次查询即判定翻页,位闭则置
-  /// 卷轴位(宿主事务后回读展开),页界**恒按表瓦片正常作答**——新版
-  /// varpage(lib ≥ 1.17.0-pack.9.0.4)允许翻页到任意目标含不动,引擎
-  /// 自由翻页 offset carry 的落点 = 原高亮,即「首翻页只展开、候选不动」
-  /// 由答案本身保证,不产瓦片重叠页。曾以「延长当前行到边界」作答,
-  /// 该页与网格表重叠:旧版遭防倒退拒答回落内置算术(高亮跳一页)且
-  /// 引擎翻页状态被污染(宿主观感 = 打字卡死),已弃——重叠页无论引擎
-  /// 接受与否都没有收益,答案恒取表页。
+  /// 卷轴位(宿主事务后回读展开)。**首翻页(前向)答原位**:上游
+  /// librime ≥ 1.17.0-pack.9.1.0 允许翻页返回任意位置——对边界查询答
+  /// 当前行,引擎 offset carry 的落点 = 原高亮,即「首翻页只展开、候选
+  /// 不动」由答案本身实现(真正的不翻页)。曾以「延长当前行到边界」
+  /// 作答,该页与网格表瓦片重叠:旧版遭防倒退拒答回落内置算术(高亮
+  /// 跳一页)且引擎翻页状态被污染,已弃。后向首翻页照常答目标行。
   func page(of index: Int) -> (start: Int, length: Int)? {
     lock.lock()
     defer { lock.unlock() }
     guard let row = rowRange(index: index) else { return nil }
     let pageTurn = lastQueryStart != nil && lastQueryStart != row.start
+    let previousStart = lastQueryStart
     lastQueryStart = row.start
     if pageTurn, !open {
       open = true
+      if let previousStart, index > previousStart,
+        let origin = rowRange(index: previousStart)
+      {
+        return (origin.start, origin.end - origin.start)
+      }
     }
     return (row.start, row.end - row.start)
+  }
+
+  /// 事务边界:清翻页识别残留。跨事务的单次查询(选键等)会把下一事务
+  /// 的首次查询误判为翻页第二段(误置卷轴位/误触原位答)。open 位不动。
+  /// 由 keyTransaction 在 processKey 前调用。
+  func beginTurnDetection() {
+    lock.lock()
+    defer { lock.unlock() }
+    lastQueryStart = nil
   }
 }
 
