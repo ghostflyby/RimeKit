@@ -19,7 +19,8 @@ import Testing
 // 构建系统如何把它带进 bundle"——比工具高一层。
 //
 // 本 target 覆盖不了工具对坏数据的拒绝:构建命令失败会中断构建,内部无从断言。
-// 那是 RimeDeployToolTests 的事。
+// 那是同 target 内 RimeDeployToolTests.swift 的事(macOS 限定的领域矩阵,进程内
+// 调用部署逻辑;两文件共用一个测试 bundle,故该 bundle 在 iOS 上也不空)。
 @Suite("插件层:构建期编译如何进 bundle——目录结构、目录名、可加载性")
 struct RimeDeployPluginTests {
   /// 插件为本 target 准备的编译数据目录。

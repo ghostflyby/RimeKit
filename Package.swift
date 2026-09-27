@@ -94,21 +94,34 @@ let package = Package(
       linkerSettings: [
         .linkedLibrary("c++")
       ]),
-    // 构建期部署插件:执行 RimeKitPreBuild 发布的预构建静态工具——二进制
-    // 自包含(静态内嵌 librime),零动态框架依赖,对构建器与目的地免疫;
-    // 工具版本由下方 binaryTarget 的 url+checksum 钉死,经 bump 工作流更新。
+    // 构建期部署插件:驱动本包内的 RimeDeploy 可执行(源码随包构建)。
+    // 工具自身经 RimeKitLinkageStatic 锚静态自包含——Xcode/DerivedData 语境
+    // 下框架不随插件工具落盘,动态链接仅 swift build 可解析(CI 实证);
+    // PreBuild 独立仓库与 artifactbundle 分发随之退役。
     .plugin(
       name: "RimeDeployPlugin",
       capability: .buildTool(),
       dependencies: ["RimeDeploy"],
       path: "Plugins/RimeDeployPlugin"),
-    .binaryTarget(
+    // 构建期部署工具(原 RimeKitPreBuild 独立仓库,product 矩阵落地后迁回):
+    // 引擎驱动走进程内 RimeKit API(setup/initializeDeployer/prebuild/
+    // deploy/finalize + logsink 错误收集),工具自身直挂 Static 锚——构建工具
+    // 必须对构建器与目的地免疫,且 Xcode 语境下动态框架不随工具落盘(CI
+    // 实证;Dynamic 锚仅 swift build 布局可解析)。
+    .target(
+      name: "RimeDeployCore",
+      dependencies: [
+        "RimeKit",
+        "RimeKitLinkageStatic",
+      ]),
+    // 命令行外壳:解析 argv、执行、报告。全部逻辑在库里以便测试直接调用。
+    .executableTarget(
       name: "RimeDeploy",
-      url: "https://github.com/ghostflyby/RimeKitPreBuild/releases/download/v0.1.2/RimeDeploy-v0.1.2.artifactbundle.zip",
-      checksum: "b258d5aa06b6ea745d40d155a88b033beca7c2375473972765c6ed6b5614d4a2"
-    ),
+      dependencies: [
+        "RimeDeployCore",
+      ]),
     // 插件附着到本包自己的数据目录(惯例名 + 非常规名并存),断言编译数据
-    // 进 bundle、布局保留,并经 RimeKit(静态)进程内加载验证。
+    // 进 bundle、布局保留,并经 RimeKit 进程内加载验证。
     .testTarget(
       name: "RimeDeployPluginTests",
       dependencies: [
@@ -118,6 +131,16 @@ let package = Package(
       path: "Tests/RimeDeployPluginTests",
       exclude: ["RimeData", "MyRimeData", "WanxiangData"],
       plugins: [.plugin(name: "RimeDeployPlugin")]),
+    .testTarget(
+      name: "RimeDeployToolTests",
+      // 领域矩阵进程内驱动部署逻辑,依赖按平台条件化(iOS 上该包仅余占位
+      // 用例,见测试文件头)。可执行 target 不可作测试依赖——它同时是插件
+      // 宿主工具(native 布局下两份 .o 并入同一测试包链接,符号成对重复)。
+      dependencies: [
+        .target(
+          name: "RimeDeployCore",
+          condition: .when(platforms: [.macOS])),
+      ]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
