@@ -70,11 +70,12 @@ jobs:
       - name: Crash diagnostics (failure only)
         if: failure()
         run: |
+          XCR=$(ls -td ~/Library/Developer/Xcode/DerivedData/RimeKit-*/Logs/Test/*.xcresult 2>/dev/null | head -1)
+          echo "== xcresult: $XCR =="
+          xcrun xcresulttool get test-results summary --path "$XCR" || true
           echo "== DiagnosticReports =="
           ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null || echo "(none)"
           for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -4); do
             echo "===== $f ====="
             cat "$f"
           done
-          echo "== simctl diagnose list (spindump/crash locations) =="
-          ls -t ~/Library/Logs/DiagnosticReports/*.hang 2>/dev/null || echo "(no hang reports)"
