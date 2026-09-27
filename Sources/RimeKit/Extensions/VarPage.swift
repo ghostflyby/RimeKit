@@ -4,6 +4,18 @@
 import Foundation
 import RimeC
 
+/// 事务翻页动作结算(宿主经 varPageLastAction 回读;raw 值跨进程传输)。
+/// `singleQueryAtFirstRow` = 该事务只有一段页查询且落在首行:行首的
+/// 后向翻页(引擎无事可做,宿主语义 = 收卷轴回单行)或行首选键——二者
+/// 由宿主以组字是否更替区分(选键必更替/提交,后向翻页组字不变)。
+public enum VarPageTurnAction: Int, Sendable {
+  case none = 0
+  case forwardTurn = 1
+  case backwardTurn = 2
+  case singleQueryAtFirstRow = 3
+  case singleQueryElsewhere = 4
+}
+
 /// varpage 动态页长:librime 的内置 selector 按 menu/page_size 整页推进,
 /// 选键槽位也是页内相对——这与"页面由 UI 按实测宽度折行"的候选窗天然
 /// 冲突。varpage 模块把页界决定权交给宿主:按键处理中同步询问 resolver
@@ -32,6 +44,10 @@ final class VarPageTileBox: @unchecked Sendable {
   /// (选中页 + 边界页);选中动作只查一次。据此识别「翻页」并触发
   /// 开卷轴。
   private var lastQueryStart: Int?
+  /// 本事务是否已识别出二段查询(翻页)。
+  private var turnDetected = false
+  /// 最近一次结算的翻页动作(keyTransaction 尾部 settle;宿主事务后回读)。
+  private var lastAction = 0
 
   init(sessionID: RimeSessionID) {
     self.sessionID = sessionID
@@ -52,6 +68,42 @@ final class VarPageTileBox: @unchecked Sendable {
     return open
   }
 
+  /// 最近一次结算的翻页动作(VarPageTurnAction raw)。
+  func lastTurnAction() -> Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return lastAction
+  }
+
+  /// 事务开头:清上一事务的查询残留(跨事务单次查询残留会把新事务的
+  /// 首次页查询误判为翻页第二段)。动作结算在事务尾 `settleTurn`。
+  func beginTurnDetection() {
+    lock.lock()
+    defer { lock.unlock() }
+    lastQueryStart = nil
+  }
+
+  /// 事务尾结算(引擎键处理完成后、宿主回读前):二段查询 = 翻页(按
+  /// probe 与选中行的相对位置分前/后向);单段查询 = 选键或「行首的
+  /// 后向翻页」(按查询行是否首行区分,宿主再以组字是否更替精化);
+  /// 无页查询 = 普通键。
+  func settleTurn() {
+    lock.lock()
+    defer { lock.unlock() }
+    if turnDetected {
+      // lastAction 已在 page(of:) 二段判定时写入。
+    } else if let residual = lastQueryStart {
+      lastAction =
+        residual == starts.first
+        ? VarPageTurnAction.singleQueryAtFirstRow.rawValue
+        : VarPageTurnAction.singleQueryElsewhere.rawValue
+    } else {
+      lastAction = VarPageTurnAction.none.rawValue
+    }
+    lastQueryStart = nil
+    turnDetected = false
+  }
+
   /// 换组字重置:位闭、清序列与查询识别状态。
   func reset() {
     lock.lock()
@@ -60,6 +112,8 @@ final class VarPageTileBox: @unchecked Sendable {
     total = 0
     open = false
     lastQueryStart = nil
+    turnDetected = false
+    lastAction = VarPageTurnAction.none.rawValue
   }
 
   /// 含 index 的行 [start, end)。
@@ -92,24 +146,22 @@ final class VarPageTileBox: @unchecked Sendable {
     let pageTurn = lastQueryStart != nil && lastQueryStart != row.start
     let previousStart = lastQueryStart
     lastQueryStart = row.start
-    if pageTurn, !open {
-      open = true
-      if let previousStart, index > previousStart,
-        let origin = rowRange(index: previousStart)
-      {
-        return (origin.start, origin.end - origin.start)
+    if pageTurn {
+      turnDetected = true
+      lastAction =
+        index > (previousStart ?? index)
+        ? VarPageTurnAction.forwardTurn.rawValue
+        : VarPageTurnAction.backwardTurn.rawValue
+      if !open {
+        open = true
+        if let previousStart, index > previousStart,
+          let origin = rowRange(index: previousStart)
+        {
+          return (origin.start, origin.end - origin.start)
+        }
       }
     }
     return (row.start, row.end - row.start)
-  }
-
-  /// 事务边界:清翻页识别残留。跨事务的单次查询(选键等)会把下一事务
-  /// 的首次查询误判为翻页第二段(误置卷轴位/误触原位答)。open 位不动。
-  /// 由 keyTransaction 在 processKey 前调用。
-  func beginTurnDetection() {
-    lock.lock()
-    defer { lock.unlock() }
-    lastQueryStart = nil
   }
 }
 
@@ -179,6 +231,15 @@ extension RimeSession {
     let id = self.id
     return try RimeSync.perform(timeout: .seconds(10)) {
       try await root.varPageIsOpen(for: id)
+    }
+  }
+
+  /// 回读本事务翻页动作结算(VarPageTurnAction raw)。
+  public func varPageLastAction() throws -> Int {
+    let root = self.root
+    let id = self.id
+    return try RimeSync.perform(timeout: .seconds(10)) {
+      try await root.varPageLastAction(for: id)
     }
   }
 

@@ -108,6 +108,37 @@ private func expectPage(
     #expect(box.isOpen() == true)
   }
 
+  @Test func settleClassifiesTurnActions() {
+    let box = VarPageTileBox(sessionID: RimeSessionID(rawValue: 1))
+    box.update(starts: [0, 3, 6, 9], total: 12)
+    // 前向二段 → forwardTurn。
+    box.beginTurnDetection()
+    _ = box.page(of: 0)
+    _ = box.page(of: 3)
+    box.settleTurn()
+    #expect(box.lastTurnAction() == VarPageTurnAction.forwardTurn.rawValue)
+    // 后向二段 → backwardTurn。
+    box.beginTurnDetection()
+    _ = box.page(of: 6)
+    _ = box.page(of: 2)
+    box.settleTurn()
+    #expect(box.lastTurnAction() == VarPageTurnAction.backwardTurn.rawValue)
+    // 单段查询落首行 → singleQueryAtFirstRow(行首后向翻页/行首选键)。
+    box.beginTurnDetection()
+    _ = box.page(of: 0)
+    box.settleTurn()
+    #expect(box.lastTurnAction() == VarPageTurnAction.singleQueryAtFirstRow.rawValue)
+    // 单段查询落他行 → singleQueryElsewhere。
+    box.beginTurnDetection()
+    _ = box.page(of: 7)
+    box.settleTurn()
+    #expect(box.lastTurnAction() == VarPageTurnAction.singleQueryElsewhere.rawValue)
+    // 无页查询 → none。
+    box.beginTurnDetection()
+    box.settleTurn()
+    #expect(box.lastTurnAction() == VarPageTurnAction.none.rawValue)
+  }
+
   @Test func outOfTableIndexAnswersUnknown() {
     let box = VarPageTileBox(sessionID: RimeSessionID(rawValue: 1))
     box.update(starts: [0, 3], total: 6)
