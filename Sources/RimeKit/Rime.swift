@@ -348,6 +348,18 @@ public distributed actor Rime {
     try engineVarPageIsOpen(for: sessionID)
   }
 
+  /// 回读本事务的翻页动作结算(VarPageTurnAction raw):二段查询 = 前/
+  /// 后向翻页;单段查询落首行 = 「行首的后向翻页或行首选键」(宿主以
+  /// 组字是否更替区分);无页查询 = none。keyTransaction 尾部结算。
+  public distributed func varPageLastAction(
+    for sessionID: RimeSessionID
+  ) async throws(RimeError) -> Int {
+    guard let box = varPageBoxes[sessionID] else {
+      return VarPageTurnAction.none.rawValue
+    }
+    return box.lastTurnAction()
+  }
+
   /// 换组字重置:位闭、清累积序列与查询识别状态。
   public distributed func varPageReset(
     for sessionID: RimeSessionID
@@ -674,11 +686,12 @@ public distributed actor Rime {
   public distributed func keyTransaction(
     keyCode: Int32, modifierMask: Int32, for session: RimeSessionID
   ) async throws(RimeError) -> RimeKeyTransactionResult {
-    // 事务边界重置翻页识别残留:跨事务的单次查询(选键等)残留会把本
-    // 事务的首次页查询误判为翻页第二段(误置卷轴位/误触原位答)。
+    // 事务开头清上一事务的查询残留(误判第二段防护);引擎键处理完成后
+    // 结算本事务的翻页动作(宿主事务后经 varPageLastAction 回读)。
     varPageBoxes[session]?.beginTurnDetection()
     let handled = try engineProcessKey(
       keyCode: keyCode, modifierMask: modifierMask, for: session)
+    varPageBoxes[session]?.settleTurn()
     return try assembleOutcome(handled: handled, for: session)
   }
 

@@ -48,6 +48,11 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 回读卷轴位:翻页动作在引擎侧 resolver 翻位,宿主事务后读取跟随。
   func varPageIsOpen() throws -> Bool
 
+  /// 本事务翻页动作结算(VarPageTurnAction raw;keyTransaction 尾部
+  /// 结算):二段查询 = 前/后向翻页;单段查询落首行 = 「行首的后向翻页
+  /// 或行首选键」;无页查询 = none。
+  func varPageLastAction() throws -> Int
+
   /// 换组字重置:位闭、清累积序列。
   func varPageReset() throws
 
