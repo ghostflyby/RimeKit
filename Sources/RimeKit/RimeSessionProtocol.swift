@@ -16,6 +16,10 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 按键事务:processKey + 提交/组字快照组装。
   func keyTransaction(keyCode: Int32, modifierMask: Int32) throws -> RimeKeyTransactionResult
 
+  /// 按键事务(自定义等待上限):拥塞时快速透传按键而不是长占调用线程。
+  func keyTransaction(keyCode: Int32, modifierMask: Int32, timeout: Duration) throws
+    -> RimeKeyTransactionResult
+
   /// 失焦/收起事务:组字态下 commitComposition 并取回提交文本;
   /// 非组字态返回 nil(无副作用)。
   func blurTransaction() throws -> RimeCommit?
