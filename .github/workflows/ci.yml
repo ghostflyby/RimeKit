@@ -67,3 +67,14 @@ jobs:
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1
+      - name: Crash diagnostics (failure only)
+        if: failure()
+        run: |
+          echo "== DiagnosticReports =="
+          ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null || echo "(none)"
+          for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -4); do
+            echo "===== $f ====="
+            cat "$f"
+          done
+          echo "== simctl diagnose list (spindump/crash locations) =="
+          ls -t ~/Library/Logs/DiagnosticReports/*.hang 2>/dev/null || echo "(no hang reports)"
