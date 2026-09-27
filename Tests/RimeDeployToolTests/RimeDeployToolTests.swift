@@ -5,10 +5,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// 部署领域测试,与插件测试同 target(见 RimeDeployPluginTests.swift 的分层说明)。
-// 整个文件以 macOS 为限——部署工具是构建宿主的构件,`Process`/`processExitsWith:`
-// 在 iOS 上不存在;iOS 构建里本文件编译为空,由同 target 的插件用例保证该 bundle
-// 永不为空(空 swift-testing 包在 Xcode 26 的 xctest 引导期即崩)。
+// 部署领域测试,独立 target(macOS 限定内容 + iOS 占位用例,见文件尾)。
+// 整个领域矩阵以 `Process` 依赖 macOS——部署工具是构建宿主的构件。
+//
+// target 结构约束(两条都是 CI 实证,勿合并/勿删):
+// ① 本 target 在 iOS 上恒无领域用例,但 swift-testing 包**不可为空**——空包
+//    在 Xcode 26 的 xctest 引导期即退出("Early unexpected exit"),且
+//    -skip-testing 挡不住(引导先于枚举)。文件尾的占位 suite 为此而设。
+// ② 领域矩阵依赖的 RimeDeployCore 必须按平台条件化:插件会把 RimeDeploy
+//    的可执行对象拖进挂插件之测试包的链接,与领域矩阵无关;本 target 不挂
+//    插件,条件化后 iOS 链接图零重量。
 //
 // 领域矩阵(退出测试):`#expect(processExitsWith:)` 重新唤起一个**全新子进程**
 // 执行闭包——夹具在闭包内生成,`runRimeDeploy` 进程内直接调用(含 Rime 初始化)。
@@ -18,13 +24,14 @@
 // 路径与参数的实现正因并行互相覆盖而废弃;如今的修法是废除通道本身,而非换一条。
 //
 // 旧独立仓库时代另有 spawn 独立二进制的冒烟层,验证 artifactbundle 分发物的
-// 进程合约;迁回本包后该层由同 target 的插件用例天然覆盖——插件构建命令
+// 进程合约;迁回本包后该层由 RimeDeployPluginTests 天然覆盖——插件构建命令
 // 驱动的就是真实工具二进制,且经由消费方唯一会走的路径。
+
+import Testing
 
 #if os(macOS)
   import Foundation
   import RimeDeployCore
-  import Testing
 
   /// 一份健康夹具编译出的全部产物(相对 out 目录,排序后)。
   private let probeArtifacts = [
@@ -346,6 +353,19 @@
       relative.append(entry)
     }
     return relative
+  }
+
+#else
+
+  /// iOS 等平台上部署工具不存在(构建宿主构件),领域矩阵整体不编译;本 suite
+  /// 只为让 swift-testing 包不为空——空包会让 Xcode 26 的 xctest 在引导期退出
+  /// (见文件头 target 结构约束①)。
+  @Suite("部署工具:iOS 上无此构件")
+  struct RimeDeployToolPlaceholderTests {
+    @Test("领域矩阵 os(macOS) 限定;本用例只为保 swift-testing 包非空")
+    func placeholderKeepsBundleNonEmpty() {
+      #expect(true, "iOS 上无部署工具可断言;空包会在 xctest 引导期崩(见文件头)")
+    }
   }
 
 #endif

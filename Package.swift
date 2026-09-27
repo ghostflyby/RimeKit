@@ -127,16 +127,20 @@ let package = Package(
       dependencies: [
         "RimeKit",
         .product(name: "RimeDynamic", package: "librime-xcframework"),
-        // 部署领域测试(RimeDeployToolTests.swift,os(macOS) 限定)同住本
-        // target。Core 不可按平台条件化:插件会把 RimeDeploy 的可执行对象
-        // 拖进本包链接(iOS 亦然),Core 缺席即未定义符号。可执行 target
-        // 本身不可作测试依赖——它同时是插件宿主工具(native 布局下两份
-        // .o 并入同一测试包链接,符号成对重复)。
-        "RimeDeployCore",
       ],
       path: "Tests/RimeDeployPluginTests",
       exclude: ["RimeData", "MyRimeData", "WanxiangData"],
       plugins: [.plugin(name: "RimeDeployPlugin")]),
+    .testTarget(
+      name: "RimeDeployToolTests",
+      // 领域矩阵进程内驱动部署逻辑,依赖按平台条件化(iOS 上该包仅余占位
+      // 用例,见测试文件头)。可执行 target 不可作测试依赖——它同时是插件
+      // 宿主工具(native 布局下两份 .o 并入同一测试包链接,符号成对重复)。
+      dependencies: [
+        .target(
+          name: "RimeDeployCore",
+          condition: .when(platforms: [.macOS])),
+      ]),
     .testTarget(
       name: "RimeKitTests",
       dependencies: [
