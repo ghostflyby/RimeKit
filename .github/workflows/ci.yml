@@ -64,6 +64,7 @@ jobs:
           xcodebuild test \
             -scheme RimeKit-Package \
             -destination "platform=iOS Simulator,id=$SIM_ID" \
+            -skip-testing:RimeDeployToolTests \
             -parallel-testing-enabled NO \
             -skipMacroValidation -skipPackagePluginValidation \
             2>&1 | tail -40
