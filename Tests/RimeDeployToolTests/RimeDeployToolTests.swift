@@ -8,13 +8,14 @@
 // 部署领域测试,独立 target(macOS 限定内容 + iOS 占位用例,见文件尾)。
 // 整个领域矩阵以 `Process` 依赖 macOS——部署工具是构建宿主的构件。
 //
-// target 结构约束(两条都是 CI 实证,勿合并/勿删):
-// ① 本 target 在 iOS 上恒无领域用例,但 swift-testing 包**不可为空**——空包
-//    在 Xcode 26 的 xctest 引导期即退出("Early unexpected exit"),且
-//    -skip-testing 挡不住(引导先于枚举)。文件尾的占位 suite 为此而设。
-// ② 领域矩阵依赖的 RimeDeployCore 必须按平台条件化:插件会把 RimeDeploy
+// target 结构约束(CI 实证,勿合并/勿删):
+// ① 领域矩阵依赖的 RimeDeployCore 必须按平台条件化:插件会把 RimeDeploy
 //    的可执行对象拖进挂插件之测试包的链接,与领域矩阵无关;本 target 不挂
 //    插件,条件化后 iOS 链接图零重量。
+// ② iOS 上本 target 恒无领域用例,文件尾保留一个占位 suite,使 bundle 在
+//    iOS 上仍有可运行用例(零用例测试包的引导行为不属本包可验证面,且与
+//    插件测试包在 Xcode 26.6 runner 上的引导退出并存过,机理未明——真正的
+//    已知问题及其处置见 ci.yml iOS job 注释)。
 //
 // 领域矩阵(退出测试):`#expect(processExitsWith:)` 重新唤起一个**全新子进程**
 // 执行闭包——夹具在闭包内生成,`runRimeDeploy` 进程内直接调用(含 Rime 初始化)。
@@ -357,14 +358,13 @@ import Testing
 
 #else
 
-  /// iOS 等平台上部署工具不存在(构建宿主构件),领域矩阵整体不编译;本 suite
-  /// 只为让 swift-testing 包不为空——空包会让 Xcode 26 的 xctest 在引导期退出
-  /// (见文件头 target 结构约束①)。
+  /// iOS 等平台上部署工具不存在(构建宿主构件),领域矩阵整体不编译。本
+  /// suite 使 target 在 iOS 上仍有可运行用例(见文件头 target 结构约束②)。
   @Suite("部署工具:iOS 上无此构件")
   struct RimeDeployToolPlaceholderTests {
-    @Test("领域矩阵 os(macOS) 限定;本用例只为保 swift-testing 包非空")
+    @Test("领域矩阵 os(macOS) 限定;iOS 上无可断言的部署行为")
     func placeholderKeepsBundleNonEmpty() {
-      #expect(true, "iOS 上无部署工具可断言;空包会在 xctest 引导期崩(见文件头)")
+      #expect(true, "iOS 上无部署工具可断言")
     }
   }
 
