@@ -5,8 +5,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// 部署测试以 `Process` 依赖 macOS,整个文件以 macOS 为限——部署工具是构建宿主
-// 的构件,iOS 测试构建里它编译为空,零用例运行。
+// 部署领域测试,与插件测试同 target(见 RimeDeployPluginTests.swift 的分层说明)。
+// 整个文件以 macOS 为限——部署工具是构建宿主的构件,`Process`/`processExitsWith:`
+// 在 iOS 上不存在;iOS 构建里本文件编译为空,由同 target 的插件用例保证该 bundle
+// 永不为空(空 swift-testing 包在 Xcode 26 的 xctest 引导期即崩)。
 //
 // 领域矩阵(退出测试):`#expect(processExitsWith:)` 重新唤起一个**全新子进程**
 // 执行闭包——夹具在闭包内生成,`runRimeDeploy` 进程内直接调用(含 Rime 初始化)。
@@ -16,7 +18,7 @@
 // 路径与参数的实现正因并行互相覆盖而废弃;如今的修法是废除通道本身,而非换一条。
 //
 // 旧独立仓库时代另有 spawn 独立二进制的冒烟层,验证 artifactbundle 分发物的
-// 进程合约;迁回本包后该层由 RimeDeployPluginTests 天然覆盖——插件构建命令
+// 进程合约;迁回本包后该层由同 target 的插件用例天然覆盖——插件构建命令
 // 驱动的就是真实工具二进制,且经由消费方唯一会走的路径。
 
 #if os(macOS)
