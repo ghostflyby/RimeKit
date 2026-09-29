@@ -43,8 +43,8 @@ struct RimeDeployPluginTests {
       "the plugin produced no RimeData directory; found \(contents(of: directory.deletingLastPathComponent()))"
     )
 
-    let files = contents(of: directory)
-    // schema 与词典各自应产出的产物。
+    // 标准布局:编译产物在 build/ 子目录,数据集根留给源数据。
+    let files = contents(of: directory.appendingPathComponent("build"))
     #expect(files.contains("probe.schema.yaml"))
     #expect(files.contains("probe.table.bin"))
     #expect(files.contains("probe.prism.bin"))
@@ -61,7 +61,7 @@ struct RimeDeployPluginTests {
         FileManager.default.fileExists(atPath: directory.path),
         "\(name) 未编译进 bundle:found \(contents(of: directory.deletingLastPathComponent()))"
       )
-      let files = contents(of: directory)
+      let files = contents(of: directory.appendingPathComponent("build"))
       #expect(files.contains("probe.table.bin"), "\(name): \(files)")
       #expect(files.contains("probe.prism.bin"), "\(name): \(files)")
     }
@@ -77,7 +77,7 @@ struct RimeDeployPluginTests {
       "插件未为 import_tables 布局产出数据目录:found \(contents(of: directory.deletingLastPathComponent()))"
     )
 
-    let files = contents(of: directory)
+    let files = contents(of: directory.appendingPathComponent("build"))
     #expect(files.contains("wanxiang.schema.yaml"), "found \(files)")
     #expect(files.contains("wanxiang.table.bin"), "found \(files)")
     #expect(files.contains("wanxiang.prism.bin"), "found \(files)")
@@ -94,7 +94,7 @@ struct RimeDeployPluginTests {
     // 是 schema_id;wanxiang_phrase_t9 显式点名了自己的 prism。dicts/t9_abbrev
     // 无人引用,连二库都没有。按"每本词典三件套"或按 schema_id 推断 prism,
     // 这两类都会被核对误杀。
-    let files = contents(of: compiledData(named: "WanxiangData"))
+    let files = contents(of: compiledData(named: "WanxiangData").appendingPathComponent("build"))
     #expect(files.contains("custom_phrase.table.bin"), "found \(files)")
     #expect(files.contains("custom_phrase.reverse.bin"), "found \(files)")
     #expect(files.contains("custom_phrase.prism.bin"), "found \(files)")
@@ -115,6 +115,19 @@ struct RimeDeployPluginTests {
     #expect(contents(of: opencc) == ["t2s.json"])
   }
 
+  @Test("RUNTIME_FILES 边车:声明的运行期文件随包分发(词典默认只活在编译期)")
+  func runtimeFilesSidecarCopiesDeclaredFiles() {
+    // RimeData 夹具的 RUNTIME_FILES 声明 probe.dict.yaml——.dict.yaml 默认
+    // 既不声明也不复制,边车是它进入 bundle 的唯一通道。
+    let directory = compiledData(named: "RimeData")
+    #expect(
+      FileManager.default.fileExists(atPath: directory.appendingPathComponent("probe.dict.yaml").path),
+      "RUNTIME_FILES 声明的文件未随包分发: \(contents(of: directory))")
+    #expect(
+      FileManager.default.fileExists(atPath: directory.appendingPathComponent("RUNTIME_FILES").path),
+      "边车本身也应作为数据集文件随包分发(非 schema/dict,走默认复制)")
+  }
+
   // 退出测试 API 在 iOS 上不可用,而引擎使用又必须隔离在子进程里——本用例
   // 以 macOS 为限(iOS 上编译剔除,零用例运行);bundle 的其余断言平台中性。
   #if os(macOS)
@@ -129,8 +142,11 @@ struct RimeDeployPluginTests {
           atPath: userDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: userDirectory) }
 
+        // 消费方标准形态:shared=数据集根,prebuilt 不设(自动推导为
+        // <shared>/build,正好是编译产物所在),user/staging=临时目录。
+        // 本用例同时端到端验证该自动推导。
         let traits = RimeTraits(
-          sharedDataDir: userDirectory,
+          sharedDataDir: Bundle.module.resourceURL!.appendingPathComponent("RimeData").path,
           userDataDir: userDirectory,
           distributionName: "tests",
           distributionCodeName: "tests",
@@ -138,7 +154,6 @@ struct RimeDeployPluginTests {
           appName: "rime.tests",
           minLogLevel: .fatal,
           logDir: "",
-          prebuiltDataDir: Bundle.module.resourceURL!.appendingPathComponent("RimeData").path,
           stagingDir: userDirectory)
 
         // 子进程独占引擎,进程退出即回收,不做 finalize。

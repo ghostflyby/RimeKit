@@ -34,9 +34,12 @@ import Testing
   import Foundation
   import RimeDeployCore
 
-  /// 一份健康夹具编译出的全部产物(相对 out 目录,排序后)。
+  /// 一份健康夹具编译出的全部产物(相对 out 目录,排序后)——编译产物落
+  /// `build/` 子目录,数据集根留给 also-copy 的源数据(标准 rime 目录形态,
+  /// 消费方 shared_data_dir 指根、prebuilt 自动推导为 <shared>/build)。
   private let probeArtifacts = [
-    "probe.prism.bin", "probe.reverse.bin", "probe.schema.yaml", "probe.table.bin",
+    "build/probe.prism.bin", "build/probe.reverse.bin", "build/probe.schema.yaml",
+    "build/probe.table.bin",
   ]
 
   /// 子进程内的夹具准备:全新目录 + 一份确实能编译的 schema 与词典,
@@ -76,7 +79,7 @@ import Testing
         ])
 
         _ = try await runRimeDeploy(request)
-        let table = fixture.out.appendingPathComponent("probe.table.bin")
+        let table = fixture.out.appendingPathComponent("build/probe.table.bin")
         let before =
           try FileManager.default
           .attributesOfItem(atPath: table.path)[.modificationDate] as? Date
@@ -215,7 +218,7 @@ import Testing
 
     // MARK: - 复制的数据
 
-    @Test("also-copy 者同入声明集:复制由部署逻辑完成,清扫保留——插件才能声明整目录")
+    @Test("also-copy 者同入声明集:源数据进根、编译产物在 build/,同一输出目录共存")
     func copiedDataIsKeptAndCopied() async {
       await #expect(processExitsWith: .success) {
         let fixture = try makeHealthyFixture()
@@ -223,11 +226,19 @@ import Testing
         try fixture.write("t2s", to: fixture.data.appendingPathComponent("opencc/t2s.json"))
 
         let outcome = try await runRimeDeploy(
-          fixture.request(expected: ["probe.table.bin"], alsoCopy: ["opencc/t2s.json"]))
+          fixture.request(
+            expected: [
+              "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
+            ],
+            alsoCopy: ["opencc/t2s.json"]))
 
-        #expect(outcome.verifiedArtifacts == 1)
+        #expect(outcome.verifiedArtifacts == 4)
         let copied = fixture.out.appendingPathComponent("opencc/t2s.json")
         #expect(try String(contentsOf: copied, encoding: .utf8) == "t2s")
+        #expect(
+          fixture.files(in: fixture.out)
+            == ["build/probe.prism.bin", "build/probe.reverse.bin",
+                "build/probe.schema.yaml", "build/probe.table.bin", "opencc/t2s.json"])
       }
     }
 

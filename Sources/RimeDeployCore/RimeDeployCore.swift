@@ -33,16 +33,18 @@ public struct RimeDeployRequest: Sendable {
   /// 源数据:`*.schema.yaml`、`*.dict.yaml` 及其引用的一切。作为 librime 的
   /// `shared_data_dir` 传入,绝不写入。
   public var dataDirectory: String
-  /// 编译产物目录,作为 librime 的 `staging_dir` 传入。
+  /// 数据集根目录:also-copy 的源数据落在根,编译产物落在其 `build/` 子目录
+  /// ——标准 rime 目录形态。作为 librime 的 `staging_dir` 的是 `build/`。
   public var outputDirectory: String
   /// 可写草稿目录,作为 `user_data_dir` 传入;默认 `<outputDirectory>-work`。
   public var workDirectory: String?
   public var mode: RimeDeployMode
-  /// 调用方期望的产物,相对 `outputDirectory`。它们会被断言存在,
-  /// 同时共同定义了"输出目录里哪些文件属于本次数据"——其余一律清除。
+  /// 调用方期望的产物,相对**staging 根**(`outputDirectory/build`)。它们会被
+  /// 断言存在,同时共同定义了"输出目录里哪些文件属于本次数据"——其余一律清除。
   public var expected: [String]
-  /// 原样复制而非编译的数据,相对 `dataDirectory`。用于 librime 在**运行期**
-  /// 读取的东西:`default.yaml`,或它按路径解析的 `opencc/` 之类目录。
+  /// 原样复制而非编译的数据,相对 `dataDirectory`,落在数据集**根**(与
+  /// `build/` 里的编译产物并列)。用于 librime 在**运行期**按路径读取的
+  /// 东西:`default.yaml`、`opencc/` 之类。
   public var alsoCopy: [String]
   /// 以 INFO 而非 WARNING 级别记录日志。
   public var verbose: Bool
@@ -156,11 +158,14 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
     appName: "rime.deploy",
     minLogLevel: request.verbose ? .info : .warning,
     logDir: "",
-    stagingDir: outDir)
+    stagingDir: outDir + "/build")
   // prebuilt_data_dir 刻意不设置:它指向随发行版分发的**只读**目录,仅在
   // staging 中找不到资源时回退查询——不是本工具的写入目标,把它指向输出目录
   // 等于把只读缓存说成正在写入的东西。不设置时取 librime 默认的
-  // <data-dir>/build,在这里是惰性的。
+  // <shared>/build——消费方把 shared_data_dir 指向本输出目录的根,编译产物
+  // 正好落在 <shared>/build,即被 deployed 解析器自动兜底命中:这是把
+  // staging 安排在 build/ 子目录的全部意义。
+  // prebuilt_data_dir 刻意不设置(见上 traits 注释)。
 
   let root = Rime.localShared
 
@@ -178,8 +183,9 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
 
     try await root.initializeDeployer(with: traits)
 
-    // 复制 librime 在运行期而非构建期读取的数据。它们与编译产物进同一目录——
-    // 客户端只会把 prebuilt_data_dir 指向那一个目录。
+    // 复制 librime 在运行期而非构建期读取的数据:进数据集**根**,与
+    // build/ 里的编译产物并列——消费方把 shared_data_dir 指向该根即可,
+    // prebuilt(=<shared>/build)与 opencc/lua 等源数据同时可达。
     for name in request.alsoCopy {
       try copyThrough(name: name, from: dataDir, to: outDir)
     }
@@ -218,9 +224,12 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
     throw RimeDeployError("\(error)")
   }
 
-  let removed = try removeStaleFiles(in: outDir, keeping: request.expected + request.alsoCopy)
+  // expected 以 staging 根(build/)为基准;also-copy 在数据集根。两者合并
+  // 构成输出目录的完整保留集。
+  let stagedExpected = request.expected.map { "build/" + $0 }
+  let removed = try removeStaleFiles(in: outDir, keeping: stagedExpected + request.alsoCopy)
 
-  let missing = missingArtifacts(in: outDir, expected: request.expected + request.alsoCopy)
+  let missing = missingArtifacts(in: outDir, expected: stagedExpected + request.alsoCopy)
   guard missing.isEmpty else {
     throw RimeDeployError(describeMissing(missing, in: outDir))
   }
