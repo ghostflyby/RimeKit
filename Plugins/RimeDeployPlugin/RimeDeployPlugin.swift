@@ -8,6 +8,12 @@
 import Foundation
 import PackagePlugin
 
+/// 插件侧诊断错误:构建失败信息走 PackagePlugin 的错误通道。
+private struct PluginDiagnostics: Error, CustomStringConvertible {
+  let description: String
+  init(_ description: String) { self.description = description }
+}
+
 /// 在构建期编译 target 内附带的 Rime 数据,并把结果作为资源交给该 target,
 /// 于是应用永远不需要在首次启动时部署。
 ///
@@ -24,8 +30,15 @@ import PackagePlugin
 ///
 /// 数据目录里放的就是本应安装进 shared data 的 Rime 源(`*.schema.yaml`、
 /// `*.dict.yaml`,以及它们引用的一切,含 `opencc/` 这类子目录)。编译结果以
-/// **单个目录**资源交回 target,因此整套目录结构都保留到 bundle 里,每个编译
-/// 目录都是一个自足的 prebuilt 目录,应用把 `prebuilt_data_dir` 指向它即可。
+/// **单个目录**资源交回 target:源数据在根、编译产物在 `build/` 子目录——
+/// 标准 rime 目录形态。消费方把 `shared_data_dir` 指向该根,librime 自动
+/// 推导 `prebuilt_data_dir = <shared>/build`,opencc/lua 等源数据与编译
+/// 产物同时经 user→shared 回退可达,无需任何显式 prebuilt 设置。
+///
+/// 数据集可在其根放 `RUNTIME_FILES` 边车(每行一个相对路径,`#` 注释)声明
+/// 默认规则之外的运行期文件——`.dict.yaml` 默认被当作纯编译期输入,但被
+/// lua 脚本在运行期按路径读取的词典(如万象 dicts/cuoyin.dict.yaml)必须
+/// 随包分发;声明的路径必须存在,不存在即构建报错。
 ///
 /// 数据目录靠查找 `*.schema.yaml` 定位,而不是靠名字:target 内**每个**直接
 /// 含有 `*.schema.yaml` 的目录都是一个数据集,各编译一份、各以其目录名进
@@ -114,6 +127,22 @@ struct RimeDeployPlugin: BuildToolPlugin {
     }
     for dictionary in reverseOnly {
       expected.insert("\(dictionary).reverse.bin")
+    }
+
+    // RUNTIME_FILES 边车:数据集声明的运行期文件(默认规则之外的 .dict.yaml
+    // 例外项等)。声明的路径必须真实存在,拼错即构建失败而非静默丢数据。
+    let sidecarURL = dataDirectory.appending(path: "RUNTIME_FILES")
+    if let sidecar = try? String(contentsOf: sidecarURL, encoding: .utf8) {
+      for rawLine in sidecar.split(separator: "\n", omittingEmptySubsequences: false) {
+        let line = rawLine.trimmingCharacters(in: .whitespaces)
+        guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+        guard relativeInputs.contains(line) else {
+          throw PluginDiagnostics(
+            "RUNTIME_FILES 声明了数据集中不存在的文件: \(line)"
+              + "(数据目录 \(dataDirectory.path(percentEncoded: false)))")
+        }
+        copied.append(line)
+      }
     }
 
     let arguments =
