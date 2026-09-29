@@ -120,11 +120,13 @@ struct RimeDeployPluginTests {
     // RimeData 夹具的 RUNTIME_FILES 声明 probe.dict.yaml——.dict.yaml 默认
     // 既不声明也不复制,边车是它进入 bundle 的唯一通道。
     let directory = compiledData(named: "RimeData")
+    let declared = directory.appendingPathComponent("probe.dict.yaml")
     #expect(
-      FileManager.default.fileExists(atPath: directory.appendingPathComponent("probe.dict.yaml").path),
+      FileManager.default.fileExists(atPath: declared.path),
       "RUNTIME_FILES 声明的文件未随包分发: \(contents(of: directory))")
+    let sidecar = directory.appendingPathComponent("RUNTIME_FILES")
     #expect(
-      FileManager.default.fileExists(atPath: directory.appendingPathComponent("RUNTIME_FILES").path),
+      FileManager.default.fileExists(atPath: sidecar.path),
       "边车本身也应作为数据集文件随包分发(非 schema/dict,走默认复制)")
   }
 

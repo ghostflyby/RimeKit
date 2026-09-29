@@ -235,10 +235,11 @@ import Testing
         #expect(outcome.verifiedArtifacts == 4)
         let copied = fixture.out.appendingPathComponent("opencc/t2s.json")
         #expect(try String(contentsOf: copied, encoding: .utf8) == "t2s")
-        #expect(
-          fixture.files(in: fixture.out)
-            == ["build/probe.prism.bin", "build/probe.reverse.bin",
-                "build/probe.schema.yaml", "build/probe.table.bin", "opencc/t2s.json"])
+        let expected = [
+          "build/probe.prism.bin", "build/probe.reverse.bin", "build/probe.schema.yaml",
+          "build/probe.table.bin", "opencc/t2s.json",
+        ]
+        #expect(fixture.files(in: fixture.out) == expected)
       }
     }
 
