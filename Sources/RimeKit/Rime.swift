@@ -772,13 +772,16 @@ public distributed actor Rime {
   }
 
   /// 事务尾部组装(原客户端 assembleOutcome 上移):提交文本 + 组字态 +
-  /// 组字快照(仅组字态取 context)。
+  /// 上下文快照。context 无条件拉取:候选不只在组字态存在——Switcher 的
+  /// 二级页(方案选单选「设置」后的开关列表)is_composing=false 而候选
+  /// 仍在,isComposing 门曾把它丢弃,消费方无法渲染二级页(实证:候选窗
+  /// 直接消失)。组字与候选有无是两个正交信号,交由消费方判定。
   private func assembleOutcome(
     handled: Bool, for session: RimeSessionID
   ) throws(RimeError) -> RimeKeyTransactionResult {
     let commit = try engineCommit(for: session)
     let composing = try engineStatus(for: session)?.isComposing ?? false
-    let context = composing ? try engineContext(for: session) : nil
+    let context = try engineContext(for: session)
     return RimeKeyTransactionResult(
       handled: handled, commit: commit, composing: composing, context: context)
   }
