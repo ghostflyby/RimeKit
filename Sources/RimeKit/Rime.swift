@@ -742,7 +742,9 @@ public distributed actor Rime {
     if let iterator = try engineCandidateList(fromIndex: fromIndex, for: sessionID) {
       defer { try? engineEndCandidateIterator(iterator) }
       items.reserveCapacity(Int(count))
-      while Int32(items.count) < count, let candidate = try engineAdvanceCandidateIterator(iterator) {
+      while Int32(items.count) < count,
+        let candidate = try engineAdvanceCandidateIterator(iterator)
+      {
         items.append(candidate)
       }
     }
