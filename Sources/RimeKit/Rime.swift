@@ -729,17 +729,34 @@ public distributed actor Rime {
   /// (宿主逐条 advance 是 N 次分布式往返,快速输入时把根 actor 占满、
   /// 键事务排队在后 = 宿主卡顿/系统超时丢组字)。到批量前迭代自然耗尽
   /// 即短批返回;起点越界返回空表。
+  ///
+  /// **Switcher 菜单补全**:`candidate_list` 迭代器对 Switcher 菜单不完整
+  /// (折叠设置串/开关类 SwitcherCommand 候选缺失或提前耗尽,而
+  /// `get_context` 的 menu 含完整集合——实证 2 对 5)。短批时以
+  /// menu.candidates 的同窗切片为准重组:普通翻译候选的 menu 只含当前
+  /// 页,窗口与迭代器一致或越界为空,互补不误伤。
   public distributed func candidatesPage(
     fromIndex: Int32, count: Int32, for sessionID: RimeSessionID
   ) async throws(RimeError) -> [RimeCandidate] {
-    guard let iterator = try engineCandidateList(fromIndex: fromIndex, for: sessionID) else {
-      return []
-    }
-    defer { try? engineEndCandidateIterator(iterator) }
     var items: [RimeCandidate] = []
-    items.reserveCapacity(Int(count))
-    while Int32(items.count) < count, let candidate = try engineAdvanceCandidateIterator(iterator) {
-      items.append(candidate)
+    if let iterator = try engineCandidateList(fromIndex: fromIndex, for: sessionID) {
+      defer { try? engineEndCandidateIterator(iterator) }
+      items.reserveCapacity(Int(count))
+      while Int32(items.count) < count, let candidate = try engineAdvanceCandidateIterator(iterator) {
+        items.append(candidate)
+      }
+    }
+    // 短批(耗尽/空迭代器)才判定:填满 count 的批不存在 menu 缺口。
+    guard items.count < Int(count),
+      let context = try? engineContext(for: sessionID)
+    else { return items }
+    let all = context.menu.candidates
+    let start = Int(fromIndex)
+    guard start < all.count, all.count > items.count else { return items }
+    let end = min(start + Int(count), all.count)
+    let window = Array(all[start..<end])
+    if window.count > items.count {
+      items = window
     }
     return items
   }
