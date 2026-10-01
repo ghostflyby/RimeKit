@@ -7,7 +7,13 @@
 
 import Distributed
 import Foundation
+import OSLog
 import RimeC
+
+/// 服务端诊断通道(XPC 排查期临时):n.notice 级,unified log 结构化可查。
+private enum ServerDiagnostics {
+  static let logger = Logger(subsystem: "dev.ghostflyby.RimeKit", category: "server")
+}
 
 #if os(macOS)
   import DistributedXPC
@@ -689,10 +695,16 @@ public distributed actor Rime {
     // 事务开头清上一事务的查询残留(误判第二段防护);引擎键处理完成后
     // 结算本事务的翻页动作(宿主事务后经 varPageLastAction 回读)。
     varPageBoxes[session]?.beginTurnDetection()
+    ServerDiagnostics.logger.notice(
+      "keyTx enter code=\(keyCode, privacy: .public) mask=\(modifierMask, privacy: .public)")
     let handled = try engineProcessKey(
       keyCode: keyCode, modifierMask: modifierMask, for: session)
     varPageBoxes[session]?.settleTurn()
-    return try assembleOutcome(handled: handled, for: session)
+    let outcome = try assembleOutcome(handled: handled, for: session)
+    ServerDiagnostics.logger.notice(
+      "keyTx exit handled=\(handled, privacy: .public) composing=\(outcome.composing, privacy: .public) candidates=\(outcome.context?.menu.candidates.count ?? -1, privacy: .public)"
+    )
+    return outcome
   }
 
   /// 失焦事务:组字态 commitComposition 并取回提交文本;非组字态 nil。
@@ -758,7 +770,14 @@ public distributed actor Rime {
     let end = min(start + Int(count), all.count)
     let window = Array(all[start..<end])
     if window.count > items.count {
+      ServerDiagnostics.logger.notice(
+        "candPage recompose from=\(fromIndex, privacy: .public) iter=\(items.count, privacy: .public) menu=\(all.count, privacy: .public) -> \(window.count, privacy: .public)"
+      )
       items = window
+    } else {
+      ServerDiagnostics.logger.notice(
+        "candPage short-batch from=\(fromIndex, privacy: .public) iter=\(items.count, privacy: .public) menu=\(all.count, privacy: .public) no-recompose"
+      )
     }
     return items
   }
