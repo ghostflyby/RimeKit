@@ -62,6 +62,20 @@ import Testing
   }
 
   @Test(arguments: RimeBackend.allCases)
+  func resetThenRepopulateRestoresResolver(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    try await session.setOption("_linear", value: true)
+    _ = try await session.typeKeys("mmmm")
+    try await session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    try await session.varPageReset()
+    try await session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+
+    _ = try await session.processKey(Key.pageDown, modifierMask: 0)
+    #expect(try await session.varPageIsOpen() == true)
+  }
+
+  @Test(arguments: RimeBackend.allCases)
   func candidatesPageBatchAssembly(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()
