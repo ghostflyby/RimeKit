@@ -80,7 +80,10 @@ public distributed actor Rime {
   internal func engineVarPageReset(for sessionID: RimeSessionID) throws(RimeError) {
     guard let box = varPageBoxes[sessionID] else { return }
     box.reset()
-    _ = RimeVarPageModule.clearResolver(for: sessionID)
+    // 会话仍会被下一轮组字复用。保留 resolver 注册,让空表期间自然
+    // 回退内置分页;下次 update 直接写回同一个 box 即恢复动态页长。
+    // 若在此卸载,update 复用 varPageBoxes 的 box 却不会重装 resolver,
+    // 此会话之后的翻页再也无法打开卷轴。
   }
 
   internal func engineVarPageHighlight(index: Int, for sessionID: RimeSessionID) throws(RimeError) {
