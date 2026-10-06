@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import Foundation
+import os
 
 /// 会话事务门:保证**同一会话**上多调用组成的事务不被其他事务插队。
 ///
@@ -12,45 +13,39 @@ import Foundation
 ///
 /// 阻塞发生在同步包装的调用方线程(见 `RimeSync`);本门内的 await 只
 /// 挂起协作线程,不占线程。
-final class RimeSessionGate: @unchecked Sendable {
-  private final class State: @unchecked Sendable {
-    let lock = NSLock()
+final class RimeSessionGate: Sendable {
+  private struct State: Sendable {
     var busy = false
     var waiters: [CheckedContinuation<Void, Never>] = []
-
-    /// 快路径立即 resume(直接获得);慢路径入队等待 release 唤醒。
-    func acquire(with continuation: CheckedContinuation<Void, Never>) {
-      lock.lock()
-      defer { lock.unlock() }
-      if !busy {
-        busy = true
-        continuation.resume()
-        return
-      }
-      waiters.append(continuation)
-    }
-
-    /// 返回需唤醒的下一等待者(nil = 释放所有权,门空闲)。
-    func release() -> CheckedContinuation<Void, Never>? {
-      lock.lock()
-      defer { lock.unlock() }
-      if waiters.isEmpty {
-        busy = false
-        return nil
-      }
-      return waiters.removeFirst()  // busy 保持 true:所有权移交
-    }
   }
 
-  private let state = State()
+  private let state = OSAllocatedUnfairLock(initialState: State())
 
   func acquire() async {
-    await withCheckedContinuation { state.acquire(with: $0) }
+    await withCheckedContinuation { continuation in
+      state.withLock { state in
+        if state.busy {
+          state.waiters.append(continuation)
+          return
+        }
+        state.busy = true
+        // 置位与 resume 必须在同一临界区内:若把 resume 移到锁外,解锁到
+        // resume 之间前持有者的 release 会看到空等待队列而置 busy=false,
+        // 第三方可抢先获得,形成双持有(慢路径 resume 在锁外是安全的——
+        // busy 保持 true 挡住新来者)。
+        continuation.resume()
+      }
+    }
   }
 
   func release() {
-    if let next = state.release() {
-      next.resume()
+    let next = state.withLock { state -> CheckedContinuation<Void, Never>? in
+      if state.waiters.isEmpty {
+        state.busy = false
+        return nil
+      }
+      return state.waiters.removeFirst()  // busy 保持 true:所有权移交
     }
+    next?.resume()
   }
 }
