@@ -81,31 +81,35 @@ private func rimeLogSinkCallback(
 ///
 /// 回调约束同转发 sink(在日志调用线程上运行、可能并发;不得回逆进入
 /// librime 日志):内部只做加锁赋值。
-public final class RimeLogErrorCollector: @unchecked Sendable {
-  private let lock = NSLock()
-  private var first: String?
-  private var installed = true
+public final class RimeLogErrorCollector: Sendable {
+  private struct State: Sendable {
+    var first: String?
+    var installed = true
+  }
+
+  private let state = OSAllocatedUnfairLock(initialState: State())
 
   /// 首条 ERROR 及以上记录,格式 `[文件:行] 内容`;尚无记录时为 nil。
   public var firstError: String? {
-    lock.lock()
-    defer { lock.unlock() }
-    return first
+    state.withLock { $0.first }
   }
 
   func record(_ message: String) {
-    lock.lock()
-    defer { lock.unlock() }
-    if first == nil { first = message }
+    state.withLock {
+      if $0.first == nil { $0.first = message }
+    }
   }
 
   /// 摘除 sink。幂等;摘除后收集器停止更新。不摘除则随进程存活——与转发
-  /// sink 的常驻语义一致。
+  /// sink 的常驻语义一致。注:并发调用时返回的一方不构成"摘除已完成"屏障
+  /// ——摘除动作在锁外完成(唯一调用方为部署工具的 defer,无并发面)。
   public func uninstall() {
-    lock.lock()
-    defer { lock.unlock() }
-    guard installed else { return }
-    installed = false
+    let shouldRemove = state.withLock { state -> Bool in
+      guard state.installed else { return false }
+      state.installed = false
+      return true
+    }
+    guard shouldRemove else { return }
     if let api = rime_get_api()?.pointee.find_module?("logsink")?.pointee.get_api() {
       let sinkAPI = UnsafeMutableRawPointer(api)
         .assumingMemoryBound(to: RimeLogSinkApi.self)

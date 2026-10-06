@@ -7,6 +7,7 @@
 
 import Foundation
 import RimeKit
+import os
 
 /// 构建期 Rime 部署工具:把 YAML 源编译成客户端运行期加载的二进制产物——
 /// 编译后的 schema 配置,以及每本词典的 table/prism/reverse 数据库。
@@ -90,46 +91,38 @@ public struct RimeDeployError: Error, CustomStringConvertible {
 /// 的是单次调用,不是一轮部署的调用组,门以 FIFO 保证整轮原子。命令行工具一进程
 /// 一次,永远遇不到;任何在进程内驱动它的东西(测试,或在多任务上部署的宿主)
 /// 都会。await 只挂起协作线程,不占线程(形态同 RimeSessionGate)。
-private final class DeploymentGate: @unchecked Sendable {
-  private final class State: @unchecked Sendable {
-    let lock = NSLock()
+private final class DeploymentGate: Sendable {
+  private struct State: Sendable {
     var busy = false
     var waiters: [CheckedContinuation<Void, Never>] = []
-
-    /// 快路径立即 resume(直接获得);慢路径入队等待 release 唤醒。
-    func acquire(with continuation: CheckedContinuation<Void, Never>) {
-      lock.lock()
-      defer { lock.unlock() }
-      if !busy {
-        busy = true
-        continuation.resume()
-        return
-      }
-      waiters.append(continuation)
-    }
-
-    /// 返回需唤醒的下一等待者(nil = 门空闲)。
-    func release() -> CheckedContinuation<Void, Never>? {
-      lock.lock()
-      defer { lock.unlock() }
-      if waiters.isEmpty {
-        busy = false
-        return nil
-      }
-      return waiters.removeFirst()  // busy 保持 true:所有权移交
-    }
   }
 
-  private let state = State()
+  private let state = OSAllocatedUnfairLock(initialState: State())
 
   func acquire() async {
-    await withCheckedContinuation { state.acquire(with: $0) }
+    await withCheckedContinuation { continuation in
+      state.withLock { state in
+        if state.busy {
+          state.waiters.append(continuation)
+          return
+        }
+        state.busy = true
+        // 置位与 resume 必须在同一临界区内:移出则解锁到 resume 之间可能
+        // 被第三方 acquire 抢先(release 见空队列置 busy=false),双持有。
+        continuation.resume()
+      }
+    }
   }
 
   func release() {
-    if let next = state.release() {
-      next.resume()
+    let next = state.withLock { state -> CheckedContinuation<Void, Never>? in
+      if state.waiters.isEmpty {
+        state.busy = false
+        return nil
+      }
+      return state.waiters.removeFirst()  // busy 保持 true:所有权移交
     }
+    next?.resume()
   }
 }
 

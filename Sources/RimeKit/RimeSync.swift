@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import Foundation
+import os
 
 /// 同步包装的阻塞执行器:在调用方线程等待 async 操作完成。
 ///
@@ -31,23 +32,22 @@ enum RimeSync {
     return try box.value.get()
   }
 
-  private final class ResultBox<T: Sendable>: @unchecked Sendable {
+  private final class ResultBox<T: Sendable>: Sendable {
+    private struct State: Sendable { var stored: Result<T, Error>? }
+
     let semaphore = DispatchSemaphore(value: 0)
-    private let lock = NSLock()
-    private var stored: Result<T, Error>?
+    private let state = OSAllocatedUnfairLock(initialState: State())
 
     func complete(with result: Result<T, Error>) {
-      lock.lock()
-      stored = result
-      lock.unlock()
+      state.withLock { $0.stored = result }
       semaphore.signal()  // stored 先于 signal 写入,唤醒方必读到值
     }
 
     var value: Result<T, Error> {
-      lock.lock()
-      defer { lock.unlock() }
-      guard let stored else { fatalError("结果未就绪却被唤醒") }
-      return stored
+      state.withLock { state in
+        guard let stored = state.stored else { fatalError("结果未就绪却被唤醒") }
+        return stored
+      }
     }
   }
 }

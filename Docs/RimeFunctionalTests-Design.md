@@ -245,8 +245,10 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
   NotificationTests 设为 `.serialized`。
 - **新建会话继承进程级"最后选择的方案"**(实证:并行套件切方案时,新会话可能
   以非默认方案起步)——"新会话默认方案"类断言须先显式归位再断言。
-- `RimeGlobalNotificationHook`(iOS 直接 C 注册)用 `NSLock` 而非 `Mutex`:
-  `Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建守护实证)。
+- `RimeGlobalNotificationHook`(iOS 直接 C 注册)用 `OSAllocatedUnfairLock` 而非
+  `Mutex`:`Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建
+  守护实证);`OSAllocatedUnfairLock` 地板 iOS 16,类型经 stdlib 声明 Sendable
+  (内部 @unchecked,`withLock` 另要求 State: Sendable)。
 - 退役通知 Box 保留强引用至进程结束,避免在途回调悬垂;安装次数有界,开销可忽略。
 
 ## 9. 落地补充(2026-09-10,通知订阅实现)
@@ -269,8 +271,10 @@ Swift 6.3.3 的 destination JSON 为 v2 全字段 schema,以下经实测可用(`
   `.serialized`。
 - **新建会话继承进程级"最后选择的方案"**(实证:并行套件切方案时,新会话可能
   以非默认方案起步)——"新会话默认方案"类断言须先显式归位再断言。
-- `RimeGlobalNotificationHook`(直接 C 注册)用 `NSLock` 而非 `Mutex`:
-  `Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建守护实证)。
+- `RimeGlobalNotificationHook`(直接 C 注册)用 `OSAllocatedUnfairLock` 而非
+  `Mutex`:`Mutex` 可用性地板 iOS 18 高于包地板 iOS 16(iOS destination 构建
+  守护实证);`OSAllocatedUnfairLock` 地板 iOS 16,类型经 stdlib 声明 Sendable
+  (内部 @unchecked,`withLock` 另要求 State: Sendable)。
 - **上游欠账已结**:SwiftXPC 0.4.0 的 `distributedXPCMain` 原生带
   `peerCodeSigningRequirement`(内核强制、激活前安装、不静默降级)与
   `shouldAccept`/`onPeerAccept`/`onPeerEnd`/`onPeerReject` 全套钩子,

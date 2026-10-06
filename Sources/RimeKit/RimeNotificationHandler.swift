@@ -7,12 +7,12 @@
 
 import Foundation
 import RimeC
-import Synchronization
+import os
 
 public typealias RimeNotificationHandler =
   @Sendable (RimeSessionID, RimeNotificationType, String) -> Void
 
-final class Box: @unchecked Sendable {
+final class Box: Sendable {
   let body: RimeNotificationHandler
 
   init(_ body: @escaping RimeNotificationHandler) {
@@ -61,26 +61,16 @@ public enum RimeNotificationType: Codable, Sendable, Hashable {
 /// librime 为进程全局单 handler(§1.3),`install` 即替换;退役的 `Box`
 /// 保留强引用至进程结束,避免在途回调悬垂(安装次数有界,开销可忽略)。
 enum RimeGlobalNotificationHook {
-  // NSLock 而非 Mutex:Mutex 的可用性地板(iOS 18)高于包地板(iOS 16)。
-  private final class State: @unchecked Sendable {
-    let lock = NSLock()
-    private var current: Box?
-    private var retired: [Box] = []
-
-    func swap(in new: Box) {
-      lock.lock()
-      defer { lock.unlock() }
-      current = new
-      retired.append(new)
-    }
+  private struct State: Sendable {
+    var retired: [Box] = []
   }
 
-  private static let state = State()
+  private static let state = OSAllocatedUnfairLock(initialState: State())
 
   static func install(_ handler: @escaping RimeNotificationHandler) {
     let box = Box(handler)
     let context = Unmanaged.passUnretained(box).toOpaque()
-    state.swap(in: box)
+    state.withLock { $0.retired.append(box) }
     rime_get_api().pointee.set_notification_handler(thunk, context)
   }
 

@@ -8,6 +8,7 @@
 import Darwin
 import Foundation
 import RimeC
+import os
 
 public struct RimeSessionID: Sendable, Codable, Hashable, RawRepresentable {
   public let rawValue: UInt
@@ -228,21 +229,16 @@ public final class RimeSession: RimeSessionProtocol {
   }
 }
 
-/// 失效标记(NSLock 而非 Mutex:与包内其他同步原语的地板对齐)。
-final class InvalidatedFlag: @unchecked Sendable {
-  private let lock = NSLock()
-  private var value = false
+/// 失效标记。
+final class InvalidatedFlag: Sendable {
+  private let value = OSAllocatedUnfairLock(initialState: false)
 
   func markInvalidated() {
-    lock.lock()
-    value = true
-    lock.unlock()
+    value.withLock { $0 = true }
   }
 
   var isInvalidated: Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return value
+    value.withLock { $0 }
   }
 }
 
@@ -374,49 +370,31 @@ extension RimeSession {
 /// `(root, id)` 至多一个存活句柄实例,别名在结构上不可能。键含根身份:
 /// 双代(blue/green)各自独立进程/代理,id 空间互不可见。
 enum RimeSessionRegistry {
-  /// NSLock 而非 Mutex:可用性地板与包地板对齐(见 RimeGlobalNotificationHook)。
-  private final class State: @unchecked Sendable {
-    let lock = NSLock()
+  private struct State: Sendable {
     var table: [ObjectIdentifier: [RimeSessionID: RimeSession]] = [:]
-
-    func lookup(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
-      lock.lock()
-      defer { lock.unlock() }
-      return table[ObjectIdentifier(root)]?[sessionID]
-    }
-
-    func register(root: Rime, session: RimeSession) {
-      lock.lock()
-      defer { lock.unlock() }
-      table[ObjectIdentifier(root), default: [:]][session.id] = session
-    }
-
-    func retire(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
-      lock.lock()
-      defer { lock.unlock() }
-      let key = ObjectIdentifier(root)
-      guard var sessions = table[key], let removed = sessions.removeValue(forKey: sessionID)
-      else { return nil }
-      if sessions.isEmpty {
-        table[key] = nil
-      } else {
-        table[key] = sessions
-      }
-      return removed
-    }
   }
 
-  private static let state = State()
+  private static let state = OSAllocatedUnfairLock(initialState: State())
 
   static func lookup(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
-    state.lookup(root: root, sessionID: sessionID)
+    state.withLock { $0.table[ObjectIdentifier(root)]?[sessionID] }
   }
 
   static func register(root: Rime, session: RimeSession) {
-    state.register(root: root, session: session)
+    state.withLock { $0.table[ObjectIdentifier(root), default: [:]][session.id] = session }
   }
 
   static func retire(root: Rime, sessionID: RimeSessionID) -> RimeSession? {
-    state.retire(root: root, sessionID: sessionID)
+    state.withLock { state in
+      let key = ObjectIdentifier(root)
+      guard var sessions = state.table[key], let removed = sessions.removeValue(forKey: sessionID)
+      else { return nil }
+      if sessions.isEmpty {
+        state.table[key] = nil
+      } else {
+        state.table[key] = sessions
+      }
+      return removed
+    }
   }
 }

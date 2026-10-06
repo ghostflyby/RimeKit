@@ -3,6 +3,7 @@
 
 import Foundation
 import RimeC
+import os
 
 /// 事务翻页动作结算(宿主经 varPageLastAction 回读;raw 值跨进程传输)。
 /// `singleQueryAtFirstRow` = 该事务只有一段页查询且落在首行:行首的
@@ -30,24 +31,41 @@ public enum VarPageTurnAction: Int, Sendable {
 /// 变动型入口(process_key/highlight/select/set_option/set_property/
 /// apply_schema);读候选列表允许。tile 表以锁保护——推送虽经 actor 串行
 /// 域,resolver 却是从引擎内部直入的裸指针路径,不享隔离。
-final class VarPageTileBox: @unchecked Sendable {
+final class VarPageTileBox: Sendable {
   let sessionID: RimeSessionID
-  private let lock = NSLock()
-  /// 累积记录的行起点序列(宿主随渲染合并推送,严格递增)。
-  private var starts: [Int] = []
-  /// 实测包络终点(末行首 + 末行数)。
-  private var total = 0
-  /// 卷轴状态位(注册内状态):翻页动作在引擎侧查询时自行翻位,宿主
-  /// 事务后回读跟随展开;不识别任何事件的 key code。
-  private var open = false
-  /// 上一查询的行起点:翻页动作 = 同一事务内两次落在**不同行**的查询
-  /// (选中页 + 边界页);选中动作只查一次。据此识别「翻页」并触发
-  /// 开卷轴。
-  private var lastQueryStart: Int?
-  /// 本事务是否已识别出二段查询(翻页)。
-  private var turnDetected = false
-  /// 最近一次结算的翻页动作(keyTransaction 尾部 settle;宿主事务后回读)。
-  private var lastAction = 0
+
+  private struct State: Sendable {
+    /// 累积记录的行起点序列(宿主随渲染合并推送,严格递增)。
+    var starts: [Int] = []
+    /// 实测包络终点(末行首 + 末行数)。
+    var total = 0
+    /// 卷轴状态位(注册内状态):翻页动作在引擎侧查询时自行翻位,宿主
+    /// 事务后回读跟随展开;不识别任何事件的 key code。
+    var open = false
+    /// 上一查询的行起点:翻页动作 = 同一事务内两次落在**不同行**的查询
+    /// (选中页 + 边界页);选中动作只查一次。据此识别「翻页」并触发
+    /// 开卷轴。
+    var lastQueryStart: Int?
+    /// 本事务是否已识别出二段查询(翻页)。
+    var turnDetected = false
+    /// 最近一次结算的翻页动作(keyTransaction 尾部 settle;宿主事务后回读)。
+    var lastAction = 0
+
+    /// 含 index 的行 [start, end)。
+    func rowRange(index: Int) -> (start: Int, end: Int)? {
+      guard !starts.isEmpty, index >= starts[0], index < total else { return nil }
+      var low = 0
+      var high = starts.count - 1
+      while low < high {
+        let mid = (low + high + 1) / 2
+        if starts[mid] <= index { low = mid } else { high = mid - 1 }
+      }
+      let end = low + 1 < starts.count ? starts[low + 1] : total
+      return (starts[low], end)
+    }
+  }
+
+  private let state = OSAllocatedUnfairLock(initialState: State())
 
   init(sessionID: RimeSessionID) {
     self.sessionID = sessionID
@@ -56,31 +74,25 @@ final class VarPageTileBox: @unchecked Sendable {
   /// 合并/覆盖累积序列与包络终点。保留位与查询识别状态(表更新不打断
   /// 翻页识别);换组字走 `reset`。
   func update(starts: [Int], total: Int) {
-    lock.lock()
-    defer { lock.unlock() }
-    self.starts = starts
-    self.total = total
+    state.withLock {
+      $0.starts = starts
+      $0.total = total
+    }
   }
 
   func isOpen() -> Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return open
+    state.withLock { $0.open }
   }
 
   /// 最近一次结算的翻页动作(VarPageTurnAction raw)。
   func lastTurnAction() -> Int {
-    lock.lock()
-    defer { lock.unlock() }
-    return lastAction
+    state.withLock { $0.lastAction }
   }
 
   /// 事务开头:清上一事务的查询残留(跨事务单次查询残留会把新事务的
   /// 首次页查询误判为翻页第二段)。动作结算在事务尾 `settleTurn`。
   func beginTurnDetection() {
-    lock.lock()
-    defer { lock.unlock() }
-    lastQueryStart = nil
+    state.withLock { $0.lastQueryStart = nil }
   }
 
   /// 事务尾结算(引擎键处理完成后、宿主回读前):二段查询 = 翻页(按
@@ -88,45 +100,32 @@ final class VarPageTileBox: @unchecked Sendable {
   /// 后向翻页」(按查询行是否首行区分,宿主再以组字是否更替精化);
   /// 无页查询 = 普通键。
   func settleTurn() {
-    lock.lock()
-    defer { lock.unlock() }
-    if turnDetected {
-      // lastAction 已在 page(of:) 二段判定时写入。
-    } else if let residual = lastQueryStart {
-      lastAction =
-        residual == starts.first
-        ? VarPageTurnAction.singleQueryAtFirstRow.rawValue
-        : VarPageTurnAction.singleQueryElsewhere.rawValue
-    } else {
-      lastAction = VarPageTurnAction.none.rawValue
+    state.withLock {
+      if $0.turnDetected {
+        // lastAction 已在 page(of:) 二段判定时写入。
+      } else if let residual = $0.lastQueryStart {
+        $0.lastAction =
+          residual == $0.starts.first
+          ? VarPageTurnAction.singleQueryAtFirstRow.rawValue
+          : VarPageTurnAction.singleQueryElsewhere.rawValue
+      } else {
+        $0.lastAction = VarPageTurnAction.none.rawValue
+      }
+      $0.lastQueryStart = nil
+      $0.turnDetected = false
     }
-    lastQueryStart = nil
-    turnDetected = false
   }
 
   /// 换组字重置:位闭、清序列与查询识别状态。
   func reset() {
-    lock.lock()
-    defer { lock.unlock() }
-    starts = []
-    total = 0
-    open = false
-    lastQueryStart = nil
-    turnDetected = false
-    lastAction = VarPageTurnAction.none.rawValue
-  }
-
-  /// 含 index 的行 [start, end)。
-  private func rowRange(index: Int) -> (start: Int, end: Int)? {
-    guard !starts.isEmpty, index >= starts[0], index < total else { return nil }
-    var low = 0
-    var high = starts.count - 1
-    while low < high {
-      let mid = (low + high + 1) / 2
-      if starts[mid] <= index { low = mid } else { high = mid - 1 }
+    state.withLock {
+      $0.starts = []
+      $0.total = 0
+      $0.open = false
+      $0.lastQueryStart = nil
+      $0.turnDetected = false
+      $0.lastAction = VarPageTurnAction.none.rawValue
     }
-    let end = low + 1 < starts.count ? starts[low + 1] : total
-    return (starts[low], end)
   }
 
   /// 查询下标所在页。表外下标 → nil(varpage 契约:整键回退内置算术)。
@@ -140,28 +139,28 @@ final class VarPageTileBox: @unchecked Sendable {
   /// 作答,该页与网格表瓦片重叠:旧版遭防倒退拒答回落内置算术(高亮
   /// 跳一页)且引擎翻页状态被污染,已弃。后向首翻页照常答目标行。
   func page(of index: Int) -> (start: Int, length: Int)? {
-    lock.lock()
-    defer { lock.unlock() }
-    guard let row = rowRange(index: index) else { return nil }
-    let pageTurn = lastQueryStart != nil && lastQueryStart != row.start
-    let previousStart = lastQueryStart
-    lastQueryStart = row.start
-    if pageTurn {
-      turnDetected = true
-      lastAction =
-        index > (previousStart ?? index)
-        ? VarPageTurnAction.forwardTurn.rawValue
-        : VarPageTurnAction.backwardTurn.rawValue
-      if !open {
-        open = true
-        if let previousStart, index > previousStart,
-          let origin = rowRange(index: previousStart)
-        {
-          return (origin.start, origin.end - origin.start)
+    state.withLock { state in
+      guard let row = state.rowRange(index: index) else { return nil }
+      let pageTurn = state.lastQueryStart != nil && state.lastQueryStart != row.start
+      let previousStart = state.lastQueryStart
+      state.lastQueryStart = row.start
+      if pageTurn {
+        state.turnDetected = true
+        state.lastAction =
+          index > (previousStart ?? index)
+          ? VarPageTurnAction.forwardTurn.rawValue
+          : VarPageTurnAction.backwardTurn.rawValue
+        if !state.open {
+          state.open = true
+          if let previousStart, index > previousStart,
+            let origin = state.rowRange(index: previousStart)
+          {
+            return (origin.start, origin.end - origin.start)
+          }
         }
       }
+      return (row.start, row.end - row.start)
     }
-    return (row.start, row.end - row.start)
   }
 }
 
