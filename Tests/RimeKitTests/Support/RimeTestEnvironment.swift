@@ -302,7 +302,7 @@ private actor RimeBootstrap {
         guard let pair = runtime.wirePair else {
           throw RimeTestFailure(stage: "backend", detail: "运行时缺少进程内 XPC 连接对")
         }
-        root = try pair.resolveProxy()
+        root = pair.resolveProxy()
     #endif
     }
 

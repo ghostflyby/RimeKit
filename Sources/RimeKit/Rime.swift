@@ -41,11 +41,10 @@ public distributed actor Rime {
   ///
   /// 进程内驱动引擎(部署工具、测试、宿主进程内会话)一律用它,不另行构造:
   /// librime 状态进程级全局,第二个本地根会绕过本 actor 的串行执行域。
-  /// macOS 的系统是不带服务的 XPCDistributedActorSystem——本地引用由编译器
-  /// 直连执行、不走远程,连接只承担 actor 系统的类型;iOS 为 RimeLocalSystem。
+  /// macOS 侧是不带连接的本地注册表系统——本地引用由编译器直连执行、
+  /// 不走远程;iOS 为 RimeLocalSystem,语义同型。
   #if os(macOS)
-    public static let localShared = Rime(
-      actorSystem: XPCDistributedActorSystem(connection: XPCConnection(name: nil)))
+    public static let localShared = Rime(actorSystem: XPCDistributedActorSystem())
   #else
     public static let localShared = Rime(actorSystem: RimeLocalSystem())
   #endif
@@ -155,9 +154,9 @@ public distributed actor Rime {
   /// 为完成标志。exit(0) 不运行 librime 级清理,但 leveldb WAL 保证重开
   /// 一致性。
   public distributed func shutdown() async throws(RimeError) {
-    // SwiftXPC 0.6 协作式关闭:拆除全部 peer → serviceWillShutdown 钩子 →
-    // 宿主 xpcMain 预置的 shutdownCompletion(exit(0))完成进程退役。客户端
-    // 应答随连接拆除而中断,以 pid 消失为完成标志。
+    // 协作式关闭:请求宿主拆除全部 peer → serviceWillShutdown 钩子 →
+    // 宿主预置的 shutdownCompletion(exit(0))完成进程退役。客户端应答随
+    // 连接拆除而中断,以 pid 消失为完成标志。
     // iOS 本地系统无服务进程语义,关闭为空操作;声明保持裸露(白表按成员枚举)。
     #if os(macOS)
       actorSystem.requestServiceShutdown()
@@ -837,12 +836,8 @@ public distributed actor Rime {
 }
 
 #if os(macOS)
-  /// 进程级单例根:`.serviceHost` 宿主系统在首个连接前预留 `.root` 身份,
-  /// 与 `shared` 首次物化的时机无关。文件作用域常量模式见 XPCRootActor 文档
-  /// (actor 自身不能以 `static let` 调 `init(actorSystem:)`)。
-  private let sharedRime = Rime(actorSystem: .serviceHost)
-
-  extension Rime: XPCRootActor {
-    public static var shared: Rime { sharedRime }
-  }
+  /// 服务托管根:`.root` 身份与单实例由服务装配在首个连接前保证
+  /// (SwiftXPC `XPCActorService` 预留身份后经 `init(actorSystem:)` 构造本根);
+  /// `XPCApp` 入口只需本一致性。
+  extension Rime: XPCRootActor {}
 #endif

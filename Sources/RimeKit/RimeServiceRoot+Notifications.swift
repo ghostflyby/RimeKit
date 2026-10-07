@@ -55,10 +55,9 @@ extension Rime {
 
 #if os(macOS)
   extension RimeNotificationSink {
-    /// 进程级共享宿主 system(匿名监听):sink 每次设置重建,system 常驻复用,
-    /// 避免高频设置时的 mach port 开销(§2.4)。
-    fileprivate static let sharedSystem = XPCDistributedActorSystem(
-      connection: XPCConnection(name: nil))
+    /// 进程级共享宿主 system(本地注册表,无连接):sink 每次设置重建,
+    /// system 常驻复用;旧 sink 随其导出会话在服务端释放后由注册表回收(§2.4)。
+    fileprivate static let sharedSystem = XPCDistributedActorSystem()
 
     fileprivate static func create(
       _ handler: @escaping RimeNotificationHandler
