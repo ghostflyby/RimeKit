@@ -15,33 +15,39 @@
   // 编码一律采用位置式 XPCArray:**字段顺序即线缆布局**,演进遵守 §4.6 additive-only 纪律。
 
   /// 位置式装箱:按给定顺序把各字段 marshal 进一个 XPCArray。
-  private func pack(_ values: any XPCMarshal...) throws(XPCMarshalError) -> XPCObject {
-    var items: [XPCObject] = []
+  private func pack(_ values: any XPCMarshal...) throws(XPCMarshalError) -> xpc_object_t {
+    var items = XPCArray()
     for value in values {
       items.append(try value.marshal())
     }
-    return try items.marshal()
+    return items.xpcObject
   }
 
   /// 取位置式字段数组并做数量下限校验。
-  private func fields(_ object: XPCObject, minimum count: Int) throws(XPCMarshalError)
-    -> [XPCObject]
+  private func fields(_ object: xpc_object_t, minimum count: Int) throws(XPCMarshalError)
+    -> [xpc_object_t]
   {
-    let array = try Array<XPCObject>.unmarshal(from: object)
+    let array = try XPCArray.unmarshal(from: object)
     guard array.count >= count else {
       throw XPCMarshalError.outOfBounds(index: array.count, count: count)
     }
-    return array
+    var result: [xpc_object_t] = []
+    result.reserveCapacity(array.count)
+    for item in array {
+      result.append(item)
+    }
+    return result
   }
 
   // MARK: 会话 ID
 
   extension RimeSessionID: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try rawValue.marshal()
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeSessionID {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeSessionID
+    {
       RimeSessionID(rawValue: try UInt.unmarshal(from: object))
     }
   }
@@ -49,11 +55,12 @@
   // MARK: 句柄(泛型单份一致性,payload 仅 UUID)
 
   extension ObjectHandle: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try id.marshal()
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> ObjectHandle {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> ObjectHandle
+    {
       ObjectHandle(id: try UUID.unmarshal(from: object))
     }
   }
@@ -61,24 +68,24 @@
   // MARK: 提交 / 状态 / 上下文
 
   extension RimeCommit: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(text)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeCommit {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeCommit {
       let f = try fields(object, minimum: 1)
       return RimeCommit(text: try String.unmarshal(from: f[0]))
     }
   }
 
   extension RimeStatus: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(
         schemaID, schemaName, isDisabled, isComposing, isASCIIMode,
         isFullShape, isSimplified, isTraditional, isASCIIPunctuation)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeStatus {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeStatus {
       let f = try fields(object, minimum: 9)
       return RimeStatus(
         schemaID: try String.unmarshal(from: f[0]),
@@ -94,11 +101,12 @@
   }
 
   extension RimeComposition: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(length, cursorPosition, selectionStart, selectionEnd, preedit)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeComposition
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
+      -> RimeComposition
     {
       let f = try fields(object, minimum: 5)
       return RimeComposition(
@@ -111,11 +119,12 @@
   }
 
   extension RimeCandidate: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(text, comment)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeCandidate {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeCandidate
+    {
       let f = try fields(object, minimum: 2)
       return RimeCandidate(
         text: try String.unmarshal(from: f[0]),
@@ -124,11 +133,11 @@
   }
 
   extension RimeMenu: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(pageSize, pageNumber, isLastPage, highlightedCandidateIndex, candidates, selectKeys)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeMenu {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeMenu {
       let f = try fields(object, minimum: 6)
       return RimeMenu(
         pageSize: try Int32.unmarshal(from: f[0]),
@@ -141,11 +150,11 @@
   }
 
   extension RimeContext: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(composition, menu, commitTextPreview, selectLabels)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeContext {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeContext {
       let f = try fields(object, minimum: 4)
       return RimeContext(
         composition: try RimeComposition.unmarshal(from: f[0]),
@@ -158,11 +167,11 @@
   // MARK: Schema / 配置位置
 
   extension RimeSchemaListItem: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(schemaID, name)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
       -> RimeSchemaListItem
     {
       let f = try fields(object, minimum: 2)
@@ -173,22 +182,24 @@
   }
 
   extension RimeSchemaList: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(items)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeSchemaList {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
+      -> RimeSchemaList
+    {
       let f = try fields(object, minimum: 1)
       return RimeSchemaList(items: try [RimeSchemaListItem].unmarshal(from: f[0]))
     }
   }
 
   extension RimeConfigLocation: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(index, key, path)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
       -> RimeConfigLocation
     {
       let f = try fields(object, minimum: 3)
@@ -202,11 +213,12 @@
   // MARK: Traits / 日志级别
 
   extension RimeLogLevel: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try rawValue.marshal()
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeLogLevel {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeLogLevel
+    {
       let raw = try Int32.unmarshal(from: object)
       guard let level = RimeLogLevel(rawValue: raw) else {
         throw XPCMarshalError.unknownEnumCase(String(raw), enumName: "RimeLogLevel")
@@ -216,14 +228,14 @@
   }
 
   extension RimeTraits: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(
         sharedDataDir, userDataDir, distributionName, distributionCodeName,
         distributionVersion, appName, modules, minLogLevel,
         logDir, prebuiltDataDir, stagingDir)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeTraits {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeTraits {
       let f = try fields(object, minimum: 11)
       return RimeTraits(
         sharedDataDir: try String.unmarshal(from: f[0]),
@@ -243,7 +255,7 @@
   // MARK: 错误(线缆布局:[caseTag, payload...];additive-only)
 
   extension RimeError: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       switch self {
       case .invalidHandle(let kind, let id):
         let kindTag =
@@ -268,10 +280,10 @@
       }
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeError {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeError {
       let f = try fields(object, minimum: 1)
       let tag = try Int.unmarshal(from: f[0])
-      func payload(_ index: Int) throws(XPCMarshalError) -> XPCObject {
+      func payload(_ index: Int) throws(XPCMarshalError) -> xpc_object_t {
         guard f.count > index else {
           throw XPCMarshalError.outOfBounds(index: f.count, count: index + 1)
         }
@@ -313,11 +325,11 @@
   // MARK: 按键事务结果 / 弹性候选
 
   extension RimeKeyTransactionResult: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(handled, commit, composing, context)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
       -> RimeKeyTransactionResult
     {
       let f = try fields(object, minimum: 4)
@@ -330,11 +342,11 @@
   }
 
   extension RimeElasticCandidates: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(items, composing, globalHighlight, pageSize)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
       -> RimeElasticCandidates
     {
       let f = try fields(object, minimum: 4)
@@ -349,11 +361,11 @@
   // MARK: 会话状态 / 翻页方向
 
   extension RimeState: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(self == .on ? 0 : 1)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError) -> RimeState {
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError) -> RimeState {
       let f = try fields(object, minimum: 1)
       guard f.count == 1 else { throw XPCMarshalError.outOfBounds(index: f.count, count: 1) }
       switch try Int.unmarshal(from: f[0]) {
@@ -366,11 +378,11 @@
   }
 
   extension RimePageDirection: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       try pack(self == .forward ? 0 : 1)
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
       -> RimePageDirection
     {
       let f = try fields(object, minimum: 1)
@@ -387,7 +399,7 @@
   // MARK: 通知类型
 
   extension RimeNotificationType: XPCMarshal {
-    public func marshal() throws(XPCMarshalError) -> XPCObject {
+    public func marshal() throws(XPCMarshalError) -> xpc_object_t {
       switch self {
       case .schema: return try pack(0)
       case .option: return try pack(1)
@@ -396,7 +408,7 @@
       }
     }
 
-    public static func unmarshal(from object: XPCObject) throws(XPCMarshalError)
+    public static func unmarshal(from object: xpc_object_t) throws(XPCMarshalError)
       -> RimeNotificationType
     {
       let f = try fields(object, minimum: 1)

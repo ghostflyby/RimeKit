@@ -51,9 +51,8 @@ let package = Package(
     // librime 二进制拖进链接闭包,System 形态无锚(链接外置)。
     .package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.1.0"),
-    // 开发期曾为本地 path 依赖(../SwiftXPC);自 0.3.2 起切正式版本。
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
-    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.6.1")
+    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.7.0")
   ],
   targets: [
     // librime C API 的包内转出口:C 模块名 Rime 与 RimeKit 的分布式 actor Rime 同名,
@@ -150,11 +149,8 @@ let package = Package(
         // 根 actor 的非 distributed 成员不可经远程引用触达,通知收集走进程级 C 钩子)。
         // RimeDynamic 为模块无关二进制产物:仅为测试运行器提供 librime 符号与链接。
         .product(name: "RimeDynamic", package: "librime-xcframework"),
-        // 进程内 XPC 连接对(SwiftXPC IntegrationConnectionPair 范式);
-        // 经 @testable 访问 reserveRootID/bind(SwiftPM debug 构建对依赖开 testability)。
-        .product(
-          name: "SwiftXPC", package: "SwiftXPC",
-          condition: .when(platforms: [.macOS])),
+        // 进程内 XPC 连接对:匿名 listener 上跑生产 XPCActorService,客户端用生产
+        // XPCRootConnection 接线(全公开 API,无 @testable 依赖)。
         .product(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS])),
