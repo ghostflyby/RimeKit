@@ -165,13 +165,13 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
   do {
     try await root.setup(with: traits)
 
-    // 在部署模块加载之前挂上收集器,以免漏掉任何一条。
-    let collector = RimeLogSink.installErrorCollector()
-    defer { collector?.uninstall() }
-    if collector == nil {
-      note(
-        "this librime has no logsink module, so a schema whose config fails to "
-          + "link cannot be detected; only the declared artifacts are checked")
+    // 在部署模块加载之前挂上收集回调,以免漏掉任何一条:link 失败只出现在
+    // glog 记录里(部署返回值仍为成功)。工具进程短命,sink 常驻即随进程退役。
+    let firstError = FirstDeployError()
+    let sinkInstalled = root.plugin.logSink()?.install { record in
+      guard record.level == .error || record.level == .fatal else { return }
+      let location = record.file.map { "[\($0):\(record.line)] " } ?? ""
+      firstError.capture(location + record.message)
     }
 
     try await root.initializeDeployer(with: traits)
@@ -194,22 +194,42 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
     // 在调用方任务上等待,但 librime 仍可能持有工作线程状态。
     try await root.finalize()
 
-    guard succeeded else {
-      throw RimeDeployError("\(request.mode.rawValue) failed; see the librime log above")
-    }
+    // 收集已到终局:一次根据最终结果与捕获的 glog 错误上报。link 失败会以
+    // "成功"返回,捕获的 ERROR+ 与失败同等定性;上报先于产物检查——它解释
+    // 了产物为何缺失。
+    if sinkInstalled == nil {
+      // 模块缺失:stderr 原样透传(未静音),glog 输出即现场,收集无从谈起。
+      note(
+        "this librime has no logsink module, so a schema whose config fails to "
+          + "link cannot be detected; only the declared artifacts are checked")
+      if !succeeded {
+        throw RimeDeployError("\(request.mode.rawValue) failed; see the librime log above")
+      }
+    } else {
+      // 模块在场:stderr 已被端点静音、logDir 为空无文件日志,捕获内容即详情。
+      switch (succeeded, firstError.value) {
+      case (true, nil):
+        break
+      case (false, nil):
+        throw RimeDeployError(
+          "\(request.mode.rawValue) failed; the deployment left no ERROR+ record to report")
+      case (false, .some(let captured)):
+        throw RimeDeployError(
+          """
+          \(request.mode.rawValue) failed. librime reported an error while deploying:
+            \(captured)
+          """)
+      case (true, .some(let captured)):
+        throw RimeDeployError(
+          """
+          librime reported an error while deploying, though deployment reported success:
+            \(captured)
 
-    // link 失败会以"成功"返回,因此日志是它唯一的痕迹。先于产物检查上报,
-    // 因为它解释了产物为何缺失。
-    if let firstError = collector?.firstError {
-      throw RimeDeployError(
-        """
-        librime reported an error while deploying:
-          \(firstError)
-
-        这并不总会反映在部署结果里:配置无法 link 的 schema(无法解析的 \
-        __include 或 __patch)会让该 schema 与其词典都不落盘,而整轮仍报成功。 \
-        请修正数据;收集到的信息指出了失败的文件。
-        """)
+          这并不总会反映在部署结果里:配置无法 link 的 schema(无法解析的 \
+          __include 或 __patch)会让该 schema 与其词典都不落盘,而整轮仍报成功。 \
+          请修正数据;收集到的信息指出了失败的文件。
+          """)
+      }
     }
   } catch let error as RimeDeployError {
     throw error
@@ -369,4 +389,15 @@ private func describeMissing(_ missing: [String], in outDir: String) -> String {
         on only inside that dictionary's table, and one nothing references
         stays a source file, so names declared for them cannot all exist
     """
+}
+
+/// 部署期 glog 首条 ERROR+ 记录的收集槽(记录回调并发,锁保护;只进不改)。
+private final class FirstDeployError: Sendable {
+  private let slot = OSAllocatedUnfairLock<String?>(initialState: nil)
+
+  var value: String? { slot.withLock { $0 } }
+
+  func capture(_ text: String) {
+    slot.withLock { if $0 == nil { $0 = text } }
+  }
 }

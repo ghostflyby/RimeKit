@@ -157,7 +157,7 @@ final class RimeTestRuntime: Sendable {
     // 根 actor 诞生于进程内 XPC 连接对的服务端(单一执行域,双后端共享;
     // 写法复制自 SwiftXPC DistributedXPCIntegrationTests.makeConnectionPair)。
     #if os(macOS)
-      let wirePair = try RimeXPCWirePair.make()
+      let wirePair = try await RimeXPCWirePair.make()
       let root = wirePair.servedRoot
     #else
       let root = Rime(actorSystem: RimeLocalSystem())

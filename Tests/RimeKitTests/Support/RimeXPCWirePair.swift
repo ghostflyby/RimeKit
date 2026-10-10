@@ -14,7 +14,7 @@
   /// 进程内 XPC 连接对:生产 `XPCActorService` 跑在匿名 listener 上,客户端用
   /// 生产 `XPCRootConnection` 拨号接线(TN3113:endpoint 直连,不落 launchd):
   ///
-  /// 1. `XPCActorService(Rime.self)` 装配服务端:预留 `.root` 身份并构造根
+  /// 1. 服务端 delegate 的 `makeRoot` 装配服务端:预留 `.root` 身份并构造根
   ///    (进程唯一 librime 执行域);
   /// 2. `listen()` 开匿名 listener,把接受的 peer 绑到该根;
   /// 3. endpoint 交客户端通道(`XPCChannelTransport.cConnection.channel(dialing:)`),
@@ -33,9 +33,16 @@
     /// 连接对服务端创建的根:进程唯一 librime 执行域。
     var servedRoot: Rime { service.root }
 
-    static func make() throws -> RimeXPCWirePair {
-      let service = XPCActorService(Rime.self)
-      let acceptor = try service.listen()
+    /// 线缆对服务端 delegate:仅提供 makeRoot,其余生命周期钩子走默认。
+    private struct ServiceDelegate: XPCConnectionActorServiceDelegate {
+      func makeRoot(actorSystem: XPCDistributedActorSystem) async throws -> Rime {
+        Rime(actorSystem: actorSystem)
+      }
+    }
+
+    static func make() async throws -> RimeXPCWirePair {
+      let service = try await XPCActorService(ServiceDelegate())
+      let acceptor = try await service.listen()
       let clientChannel = try XPCChannelTransport.cConnection.channel(
         dialing: acceptor.wireEndpoint)
       let client = try XPCRootConnection<Rime>.connect(using: clientChannel)
