@@ -1,39 +1,24 @@
 import Foundation
-import Logging
 import RimeC
 import os
 
-/// librime glog 转接目标。宿主在库初始化阶段注入 logger(`Logging.Logger`
-/// 值自带 label 与落盘后端,`Logger(label:factory:)` 可绕过 LoggingSystem
-/// 直连任意 handler);未注入用 librime 专属默认 label。
+/// librime glog 转接目标。默认 librime 专属 subsystem(跨蓝绿代次稳定);
+/// 宿主可在 librime 初始化前替换为自身 subsystem 并入统一检索。
 public enum RimeLog {
-  private static let storage = OSAllocatedUnfairLock(
-    initialState: Logging.Logger(label: "dev.ghostflyby.rime.librime"))
-
-  /// 注入 logger。应在 `RimeLogSink.install()`/引擎 setup 前调用;
-  /// 重复注入以后一次为准。
-  public static func initialize(logger: Logging.Logger) {
-    storage.withLock { $0 = logger }
-  }
-
-  /// 当前 logger(模块内取值:glog 转发回调与散点错误路径)。
-  static var logger: Logging.Logger {
-    storage.withLock { $0 }
-  }
+  public nonisolated(unsafe) static var logger = Logger(
+    subsystem: "dev.ghostflyby.rime", category: "librime")
 }
 
-/// librime logsink 安装与配置:把 glog 记录转发到 `RimeLog` 注入的 logger
-/// 并可静音 stderr。模块构造器注册先于 setup,`install()` 在任意阶段可调用
+/// librime logsink 安装与配置:把 glog 记录转发到 `RimeLog.logger` 并可
+/// 静音 stderr。模块构造器注册先于 setup,`install()` 在任意阶段可调用
 /// (越早安装,能捕获的组件注册/部署日志越全);幂等(同一 context)。
 ///
 /// 回调约束(头文件):在日志调用线程上运行、可能并发;不得回逆进入
 /// librime 日志(同步 LOG 带锁重入死锁)、不得在回调内调
-/// set_stderr_threshold;保持短小——落盘后端的非阻塞性由宿主注入时保证
-/// (如 os.Logger 系 handler)。
+/// set_stderr_threshold;保持短小——os.Logger 满足全部约束。
 ///
-/// 隐私:swift-log 无 privacy 标注,记录可见性由宿主后端决定;glog INFO+
-/// 为引擎内部诊断(部署/字典/Lua),键入内容仅存在于更低 VERBOSE 档,不进
-/// 本通道——后端宜以 public 落盘保取证可见性。
+/// 隐私:glog INFO+ 为引擎内部诊断(部署/字典/Lua),按宿主约定以
+/// public 落统一日志;键入内容仅存在于更低 VERBOSE 档,不进本通道。
 public enum RimeLogSink {
   /// 安装转发 sink 并静音 stderr。幂等(add_sink 对同一 context 返回
   /// false 无副作用)。
@@ -75,16 +60,19 @@ private func rimeLogSinkCallback(
   }
   let file = r.base_filename.map { String(cString: $0) } ?? "?"
 
-  let level: Logging.Logger.Level
+  let level: OSLogType
   switch r.severity {
   case .info: level = .info
-  case .warning: level = .notice
+  case .warning: level = .default
   case .error: level = .error
-  case .fatal: level = .critical
-  @unknown default: level = .notice
+  case .fatal: level = .fault
+  @unknown default: level = .default
   }
 
-  RimeLog.logger.log(level: level, "[\(file):\(r.line)] \(message)")
+  RimeLog.logger.log(
+    level: level,
+    "[\(file, privacy: .public):\(r.line, privacy: .public)] \(message, privacy: .public)"
+  )
 }
 
 /// librime ERROR 及以上记录的进程内收集器,经 `RimeLogSink.installErrorCollector()`
