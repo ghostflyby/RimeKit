@@ -52,11 +52,7 @@ let package = Package(
     .package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.1.0"),
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
-    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.7.0"),
-    // 日志门面:RimeLog 只暴露注入面(Logging.Logger),label 与落盘后端完全
-    // 由宿主决定(LoggingSystem.bootstrap 或 Logger(label:factory:) 直连);
-    // 未 bootstrap 的进程按 swift-log 默认回落 stdout。
-    .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
+    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.7.0")
   ],
   targets: [
     // librime C API 的包内转出口:C 模块名 Rime 与 RimeKit 的分布式 actor Rime 同名,
@@ -71,7 +67,6 @@ let package = Package(
       name: "RimeKit",
       dependencies: [
         "RimeC",
-        .product(name: "Logging", package: "swift-log"),
         .product(
           name: "DistributedXPC", package: "SwiftXPC",
           condition: .when(platforms: [.macOS]))
