@@ -181,7 +181,7 @@ enum RimeVarPageModule {
         .map({ UnsafeMutableRawPointer($0).assumingMemoryBound(to: RimeVarPageApi.self) }),
       let setResolver = api.pointee.set_resolver
     else {
-      RimeLog.logger.error("varpage 模块不可用;页界回退内置 page_size 算术")
+      RimeLog.emit(.error, "varpage 模块不可用;页界回退内置 page_size 算术")
       return false
     }
     let context = Unmanaged.passUnretained(box).toOpaque()
