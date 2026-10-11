@@ -166,7 +166,7 @@ public distributed actor Rime {
   // MARK: 生命周期
 
   public distributed func setup(with traits: RimeTraits) async throws(RimeError) {
-    // 日志配置由下游决定(RimeLogSink.install 等);setup 保持中性。
+    // 日志配置由下游决定(Rime.plugin.logSink()?.install(handler:));setup 保持中性。
     var t = rime_traits_t.rimeStructInit()
     let handle = traits.toCStructure(&t)
     rimeApi.setup(&t)
