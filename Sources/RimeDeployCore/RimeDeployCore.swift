@@ -47,6 +47,11 @@ public struct RimeDeployRequest: Sendable {
   /// `build/` 里的编译产物并列)。用于 librime 在**运行期**按路径读取的
   /// 东西:`default.yaml`、`opencc/` 之类。
   public var alsoCopy: [String]
+  /// 上游 OpenCC 数据目录(资源 bundle 里的 `opencc/`),作为输出 `opencc/`
+  /// 的垫底层:数据集自带的文件逐文件优先,数据集没有的文件由上游补全——
+  /// librime 按 `<shared>/opencc/<名字>` 解析 simplifier 的配置,数据根里
+  /// 没有全量集时简繁转换静默失效。nil = 不垫底。
+  public var upstreamOpenCC: String?
   /// 以 INFO 而非 WARNING 级别记录日志。
   public var verbose: Bool
 
@@ -57,6 +62,7 @@ public struct RimeDeployRequest: Sendable {
     mode: RimeDeployMode = .prebuild,
     expected: [String] = [],
     alsoCopy: [String] = [],
+    upstreamOpenCC: String? = nil,
     verbose: Bool = false
   ) {
     self.dataDirectory = dataDirectory
@@ -65,6 +71,7 @@ public struct RimeDeployRequest: Sendable {
     self.mode = mode
     self.expected = expected
     self.alsoCopy = alsoCopy
+    self.upstreamOpenCC = upstreamOpenCC
     self.verbose = verbose
   }
 }
@@ -237,12 +244,22 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
     throw RimeDeployError("\(error)")
   }
 
-  // expected 以 staging 根(build/)为基准;also-copy 在数据集根。两者合并
-  // 构成输出目录的完整保留集。
-  let stagedExpected = request.expected.map { "build/" + $0 }
-  let removed = try removeStaleFiles(in: outDir, keeping: stagedExpected + request.alsoCopy)
+  // 上游 OpenCC 全量集垫底:数据集自带者已由 also-copy 以同名进根,逐文件
+  // 优先;其余由上游补全。返回值并入声明集——这些文件是本工具的产出,否则
+  // 二轮部署的清扫会把垫底当成陈旧物删掉。复制在部署终局之后进行:纯文件
+  // 操作,不碰 librime 状态,失败照样以构建错误上报。
+  let upstreamCopied =
+    try request.upstreamOpenCC.map {
+      try copyUpstreamOpenCC(from: $0, into: outDir, datasetProvided: Set(request.alsoCopy))
+    } ?? []
 
-  let missing = missingArtifacts(in: outDir, expected: stagedExpected + request.alsoCopy)
+  // expected 以 staging 根(build/)为基准;also-copy 与上游垫底在数据集根。
+  // 三者合并构成输出目录的完整保留集。
+  let stagedExpected = request.expected.map { "build/" + $0 }
+  let keeping = stagedExpected + request.alsoCopy + upstreamCopied
+  let removed = try removeStaleFiles(in: outDir, keeping: keeping)
+
+  let missing = missingArtifacts(in: outDir, expected: keeping)
   guard missing.isEmpty else {
     throw RimeDeployError(describeMissing(missing, in: outDir))
   }
@@ -295,6 +312,43 @@ private func copyThrough(name: String, from dataDir: String, to outDir: String) 
   } catch {
     throw RimeDeployError("cannot copy \(name) into \(outDir): \(error.localizedDescription)")
   }
+}
+
+/// 上游 OpenCC 数据垫底:把 `source`(资源 bundle 里的 `opencc/`)下的每个
+/// 文件复制进输出目录的同名位置,输出目录里已有的文件(数据集自带的
+/// `opencc/<名字>`,经 also-copy 先行进根)一律不动——数据集自带的配置与它
+/// 引用的词典是作者配套的集合,覆盖意图优先。返回实际复制的相对路径
+/// (`opencc/` 前缀),与 also-copy 同入声明集。
+private func copyUpstreamOpenCC(
+  from source: String, into outDir: String, datasetProvided: Set<String>
+) throws -> [String] {
+  var isDirectory: ObjCBool = false
+  guard
+    FileManager.default.fileExists(atPath: source, isDirectory: &isDirectory),
+    isDirectory.boolValue
+  else {
+    throw RimeDeployError("--upstream-opencc is not a directory: \(source)")
+  }
+
+  var copied: [String] = []
+  for relative in relativeFilePaths(in: source).sorted() {
+    let name = "opencc/\(relative)"
+    guard !datasetProvided.contains(name) else { continue }
+    let destination = "\(outDir)/\(name)"
+    do {
+      let parent = (destination as NSString).deletingLastPathComponent
+      try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+      if FileManager.default.fileExists(atPath: destination) {
+        try FileManager.default.removeItem(atPath: destination)
+      }
+      try FileManager.default.copyItem(atPath: "\(source)/\(relative)", toPath: destination)
+      copied.append(name)
+    } catch {
+      throw RimeDeployError(
+        "cannot copy upstream opencc \(relative) into \(outDir): \(error.localizedDescription)")
+    }
+  }
+  return copied
 }
 
 /// `directory` 下任意深度的全部文件,以相对路径表示。

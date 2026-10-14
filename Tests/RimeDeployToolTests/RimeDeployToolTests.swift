@@ -274,6 +274,60 @@ import Testing
         }
       }
     }
+
+    // MARK: - 上游 OpenCC 垫底
+
+    @Test("上游垫底:数据集自带者逐文件优先,其余由上游补全,同入声明集(清扫不误删)")
+    func upstreamOpenCCUnderlaysAndYieldsToDataset() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+        // 上游集两文件,其一与数据集自带同名而内容不同——同名者必须以数据集
+        // 为准,其余由上游补全。
+        let upstream = fixture.root.appendingPathComponent("upstream-opencc")
+        try fixture.write("upstream t2s", to: upstream.appendingPathComponent("t2s.json"))
+        try fixture.write("upstream only", to: upstream.appendingPathComponent("extra.ocd2"))
+        try fixture.write(
+          "dataset t2s", to: fixture.data.appendingPathComponent("opencc/t2s.json"))
+
+        let request = fixture.request(
+          expected: [
+            "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
+          ],
+          alsoCopy: ["opencc/t2s.json"],
+          upstreamOpenCC: upstream.path)
+        _ = try await runRimeDeploy(request)
+        // 二轮部署幂等:垫底者同入声明集,清扫不得把上游补全当陈旧物删除。
+        let outcome = try await runRimeDeploy(request)
+
+        #expect(outcome.verifiedArtifacts == 4)
+        #expect(outcome.removedStaleFiles == 0)
+        let files = fixture.files(in: fixture.out)
+        let t2s = try String(
+          contentsOf: fixture.out.appendingPathComponent("opencc/t2s.json"), encoding: .utf8)
+        #expect(t2s == "dataset t2s", "\(files)")
+        let extra = try String(
+          contentsOf: fixture.out.appendingPathComponent("opencc/extra.ocd2"), encoding: .utf8)
+        #expect(extra == "upstream only", "\(files)")
+      }
+    }
+
+    @Test func missingUpstreamOpenCCFails() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+
+        do {
+          _ = try await runRimeDeploy(
+            fixture.request(
+              expected: ["probe.table.bin"],
+              upstreamOpenCC: fixture.root.appendingPathComponent("absent").path))
+          Issue.record("expected the deployment to be rejected")
+        } catch let error as RimeDeployError {
+          #expect(error.description.contains("--upstream-opencc"))
+        }
+      }
+    }
   }
 
   /// 一次测试用完即弃的目录。
@@ -338,6 +392,7 @@ import Testing
     func request(
       expected: [String] = [],
       alsoCopy: [String] = [],
+      upstreamOpenCC: String? = nil,
       mode: RimeDeployMode = .prebuild
     ) -> RimeDeployRequest {
       RimeDeployRequest(
@@ -346,7 +401,8 @@ import Testing
         workDirectory: work.path,
         mode: mode,
         expected: expected,
-        alsoCopy: alsoCopy)
+        alsoCopy: alsoCopy,
+        upstreamOpenCC: upstreamOpenCC)
     }
   }
 

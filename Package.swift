@@ -50,7 +50,7 @@ let package = Package(
     // 进链接的通道由上方 products 选型决定:每种形态一个"链接锚"target 把对应的
     // librime 二进制拖进链接闭包,System 形态无锚(链接外置)。
     .package(
-      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.9.1.0"),
+      url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.10.0.0"),
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
     .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.8.2")
   ],
@@ -118,6 +118,11 @@ let package = Package(
       name: "RimeDeploy",
       dependencies: [
         "RimeDeployCore",
+        // 上游 OpenCC 数据:命令外壳经 RimeOpenCCData.url 在**运行期**解析
+        // 资源 bundle(插件无法在规划期定位它——Xcode 给插件的工具路径是
+        // 未展开的构建设置宏,实证)。依赖挂在可执行上,资源 bundle 随工具
+        // 产物图落盘在可执行旁;只进构建工具,不进任何运行期消费方。
+        .product(name: "RimeOpenCCData", package: "librime-xcframework"),
       ]),
     // 插件附着到本包自己的数据目录(惯例名 + 非常规名并存),断言编译数据
     // 进 bundle、布局保留,并经 RimeKit 进程内加载验证。
