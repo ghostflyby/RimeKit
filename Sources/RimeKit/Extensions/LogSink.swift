@@ -77,7 +77,7 @@ public struct RimeLogSink {
   @discardableResult
   public func install(handler: RimeLogHandler?) -> Bool {
     RimeLog.set(handler: handler)
-    api.pointee.set_stderr_threshold(.silent)
+    _ = api.pointee.set_stderr_threshold(.silent)
     return api.pointee.add_sink(nil, rimeLogSinkCallback)
   }
 }
