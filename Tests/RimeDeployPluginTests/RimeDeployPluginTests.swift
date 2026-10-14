@@ -163,7 +163,7 @@ struct RimeDeployPluginTests {
         try await root.setup(with: traits)
         try await root.initialize(with: traits)
 
-        let session = try #require(await root.createSession())
+        let session = try await root.createSession()
         #expect(try await root.selectSchema("probe", for: session) == true)
       }
     }

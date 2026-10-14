@@ -18,10 +18,10 @@ import Testing
 
     let before = try await session.context?.commitTextPreview
     // 页界表:4 行 × 3 格,瓦片覆盖全部 12 候选。
-    try await session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    try session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
 
     let handled = try await session.processKey(Key.pageDown, modifierMask: 0)
-    let open = try await session.varPageIsOpen()
+    let open = try session.varPageIsOpen()
     let preview = try await session.context?.commitTextPreview
 
     #expect(handled == true)
@@ -36,7 +36,7 @@ import Testing
     let session = try await env.makeSession()
     try await session.setOption("_linear", value: true)
     _ = try await session.typeKeys("mmmm")
-    try await session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    try session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
     _ = try await session.processKey(Key.pageDown, modifierMask: 0)
 
     // 展开态二次翻页:答目标行,落点 = 第二行首(offset 0)。
@@ -54,7 +54,7 @@ import Testing
     _ = try await session.typeKeys("mmmm")
 
     let handled = try await session.processKey(Key.pageDown, modifierMask: 0)
-    let open = try await session.varPageIsOpen()
+    let open = try session.varPageIsOpen()
 
     // 无表:resolver 恒答未知,内置算术接管,卷轴位不置。
     #expect(handled == true)
@@ -67,12 +67,12 @@ import Testing
     let session = try await env.makeSession()
     try await session.setOption("_linear", value: true)
     _ = try await session.typeKeys("mmmm")
-    try await session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
-    try await session.varPageReset()
-    try await session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    try session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    try session.varPageReset()
+    try session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
 
     _ = try await session.processKey(Key.pageDown, modifierMask: 0)
-    #expect(try await session.varPageIsOpen() == true)
+    #expect(try session.varPageIsOpen() == true)
   }
 
   @Test(arguments: RimeBackend.allCases)
