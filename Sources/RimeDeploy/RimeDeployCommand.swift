@@ -7,7 +7,6 @@
 
 import Foundation
 import RimeDeployCore
-import RimeOpenCCData
 
 /// `RimeDeployCore` 的命令行前端:解析 argv、执行、报告。全部逻辑都在库里,
 /// 以便测试直接调用——构建命令非零退出会中断构建,仅作为可执行文件存在的工具
@@ -44,17 +43,23 @@ enum RimeDeployCommand {
                           opencc/ directory. Repeat as needed.
       --upstream-opencc <dir>
                           Base layer for the output opencc/ directory: every file
-                          under <dir> is copied there, while files the data set
-                          itself provides (via --also-copy) win per file. Use the
-                          RimeOpenCCData resource bundle's opencc/ directory to
-                          give every data root the full upstream conversion set.
+                          under <dir> is copied there, while positions the data
+                          set itself declares (via --also-copy, per file or a
+                          whole directory) win. Use the RimeOpenCCData resource
+                          bundle's opencc/ directory to give every data root the
+                          full upstream conversion set.
       --with-upstream-opencc
-                          Same, with <dir> resolved at run time from the
-                          RimeOpenCCData resource bundle that ships beside this
-                          tool. This is what the build plugin passes: a build
-                          tool plugin cannot locate the bundle while planning
-                          (Xcode hands it unexpanded build-setting macros), but
-                          the running tool always finds its own resources.
+                          Same, with <dir> resolved at run time by scanning the
+                          directory beside this tool's own executable for the
+                          RimeOpenCCData resource bundle (plain POSIX directory
+                          scan, no Bundle/Foundation service lookups). This is
+                          what the build plugin passes: a build tool plugin
+                          cannot locate the bundle while planning (Xcode hands
+                          it unexpanded build-setting macros), while the running
+                          tool finds the bundle beside its executable in both
+                          supported build layouts (SwiftPM and Xcode). If
+                          neither flag suits you, --upstream-opencc is the
+                          escape hatch.
       --verbose           Log at INFO instead of WARNING.
       -h, --help          Show this message.
 
@@ -95,10 +100,17 @@ enum RimeDeployCommand {
       case "--also-copy": alsoCopy.append(nextValue(argument))
       case "--upstream-opencc": upstreamOpenCC = nextValue(argument)
       case "--with-upstream-opencc":
-        // 运行期解析随工具落盘的资源 bundle。找不到时资源访问器 fatalError,
-        // 即为构建失败——simplifier 缺数据的失效是运行期静默的,必须在构建期
-        // 喊出来,而不是让消费方部署一份简繁转换失效的数据。
-        upstreamOpenCC = RimeOpenCCData.url.path
+        // 运行期按可执行兄弟目录定位随工具落盘的资源 bundle(纯 POSIX 扫描,
+        // 刻意不走 Bundle/CFBundle——沙盒语境下 CarbonCore checkin 故障类,
+        // 见 locateUpstreamOpenCC 注释)。定位失败即当场非零退出:构建失败,
+        // 而不是让消费方部署一份简繁转换静默失效的数据。
+        do {
+          upstreamOpenCC = try locateUpstreamOpenCC(executablePath: CommandLine.arguments[0])
+        } catch let error as RimeDeployError {
+          fail(error.description)
+        } catch {
+          fail("\(error)")
+        }
       case "--verbose": verbose = true
       case "-h", "--help":
         print(usage)

@@ -324,8 +324,94 @@ import Testing
               upstreamOpenCC: fixture.root.appendingPathComponent("absent").path))
           Issue.record("expected the deployment to be rejected")
         } catch let error as RimeDeployError {
-          #expect(error.description.contains("--upstream-opencc"))
+          #expect(error.description.contains("--upstream-opencc does not exist"))
         }
+      }
+    }
+
+    @Test func upstreamOpenCCPathThatIsAFileFails() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+        let filePath = fixture.root.appendingPathComponent("a-file")
+        try fixture.write("x", to: filePath)
+
+        do {
+          _ = try await runRimeDeploy(
+            fixture.request(expected: ["probe.table.bin"], upstreamOpenCC: filePath.path))
+          Issue.record("expected the deployment to be rejected")
+        } catch let error as RimeDeployError {
+          #expect(error.description.contains("--upstream-opencc is not a directory"))
+        }
+      }
+    }
+
+    @Test("上游垫底:子目录整树复制,点文件不入根")
+    func upstreamOpenCCSubtreeCopiesAndSkipsDotFiles() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+        let upstream = fixture.root.appendingPathComponent("upstream-opencc")
+        try fixture.write("upstream deep", to: upstream.appendingPathComponent("sub/deep.json"))
+        try fixture.write("noise", to: upstream.appendingPathComponent(".DS_Store"))
+
+        let outcome = try await runRimeDeploy(
+          fixture.request(
+            expected: [
+              "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
+            ],
+            upstreamOpenCC: upstream.path))
+
+        #expect(outcome.verifiedArtifacts == 4)
+        let files = fixture.files(in: fixture.out)
+        let deep = try String(
+          contentsOf: fixture.out.appendingPathComponent("opencc/sub/deep.json"), encoding: .utf8)
+        #expect(deep == "upstream deep", "\(files)")
+        #expect(!files.contains("opencc/.DS_Store"), "\(files)")
+      }
+    }
+
+    // MARK: - 上游 bundle 定位(纯 POSIX 扫描,不经部署流程、不碰 librime)
+
+    @Test("上游 bundle 定位:可执行旁唯一 *RimeOpenCCData*.bundle,深形态解析到 Contents/Resources/opencc")
+    func locateUpstreamOpenCCResolvesDeepBundleBesideExecutable() throws {
+      let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("rime-locate-\(UUID().uuidString)")
+      defer { try? FileManager.default.removeItem(at: root) }
+      let tool = root.appendingPathComponent("RimeDeploy")
+      try FileManager.default.createDirectory(at: tool, withIntermediateDirectories: true)
+      let opencc =
+        root
+        .appendingPathComponent("Librime_RimeOpenCCData.bundle", isDirectory: true)
+        .appendingPathComponent("Contents")
+        .appendingPathComponent("Resources")
+        .appendingPathComponent("opencc", isDirectory: true)
+      try FileManager.default.createDirectory(at: opencc, withIntermediateDirectories: true)
+      try "x".write(
+        to: opencc.appendingPathComponent("s2t.json"), atomically: true, encoding: .utf8)
+
+      let located = try locateUpstreamOpenCC(executablePath: tool.path)
+
+      #expect(located.hasSuffix("opencc"), "\(located)")
+      #expect(
+        FileManager.default.fileExists(atPath: located + "/s2t.json"), "\(located)")
+    }
+
+    @Test("上游 bundle 定位:缺席即报错(构建期喊出来)")
+    func locateUpstreamOpenCCWithoutBundleFails() {
+      let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("rime-locate-\(UUID().uuidString)")
+      defer { try? FileManager.default.removeItem(at: root) }
+      let tool = root.appendingPathComponent("RimeDeploy")
+      try? FileManager.default.createDirectory(at: tool, withIntermediateDirectories: true)
+
+      do {
+        _ = try locateUpstreamOpenCC(executablePath: tool.path)
+        Issue.record("expected the lookup to fail")
+      } catch let error as RimeDeployError {
+        #expect(error.description.contains("cannot locate the RimeOpenCCData resource bundle"))
+      } catch {
+        Issue.record("unexpected error type: \(error)")
       }
     }
   }
