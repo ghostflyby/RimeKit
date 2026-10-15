@@ -312,6 +312,65 @@ import Testing
       }
     }
 
+    @Test("整目录声明:opencc 一个条目赢得整个子树(上游不补),目录内文件同受清扫保留")
+    func directoryDeclarationCoversSubtree() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+        let upstream = fixture.root.appendingPathComponent("upstream-opencc")
+        try fixture.write("upstream t2s", to: upstream.appendingPathComponent("t2s.json"))
+        try fixture.write("upstream extra", to: upstream.appendingPathComponent("extra.ocd2"))
+        try fixture.write(
+          "dataset t2s", to: fixture.data.appendingPathComponent("opencc/t2s.json"))
+
+        // 目录声明而非逐文件列表:整个 opencc/ 子树归数据集,上游一个都不补;
+        // 目录内文件全部保留——清扫按声明覆盖判定,不把目录内的文件当陈旧物。
+        let request = fixture.request(
+          expected: [
+            "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
+          ],
+          alsoCopy: ["opencc"],
+          upstreamOpenCC: upstream.path)
+        _ = try await runRimeDeploy(request)
+        let outcome = try await runRimeDeploy(request)
+
+        #expect(outcome.verifiedArtifacts == 4)
+        #expect(outcome.removedStaleFiles == 0)
+        let files = fixture.files(in: fixture.out)
+        let t2s = try String(
+          contentsOf: fixture.out.appendingPathComponent("opencc/t2s.json"), encoding: .utf8)
+        #expect(t2s == "dataset t2s", "\(files)")
+        #expect(!files.contains("opencc/extra.ocd2"), "\(files)")
+      }
+    }
+
+    @Test("未声明的同名遗留物:被上游垫底覆盖,并转为声明集内保留")
+    func upstreamOverwritesUndeclaredLeftovers() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+        // 先造一份"上一轮遗留"的同名文件:本轮数据不声明 opencc/,上游应当
+        // 覆盖它而不是把它留给清扫当陈旧物。
+        try fixture.write(
+          "leftover", to: fixture.out.appendingPathComponent("opencc/t2s.json"))
+        let upstream = fixture.root.appendingPathComponent("upstream-opencc")
+        try fixture.write("upstream t2s", to: upstream.appendingPathComponent("t2s.json"))
+
+        let request = fixture.request(
+          expected: [
+            "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
+          ],
+          upstreamOpenCC: upstream.path)
+        _ = try await runRimeDeploy(request)
+        let outcome = try await runRimeDeploy(request)
+
+        #expect(outcome.removedStaleFiles == 0)
+        let t2s = try String(
+          contentsOf: fixture.out.appendingPathComponent("opencc/t2s.json"), encoding: .utf8)
+        #expect(t2s == "upstream t2s")
+      }
+    }
+
     @Test func missingUpstreamOpenCCFails() async {
       await #expect(processExitsWith: .success) {
         let fixture = try makeHealthyFixture()
@@ -373,9 +432,9 @@ import Testing
 
     // MARK: - 上游 bundle 定位
 
-    // 定位走上游访问器 RimeOpenCCData.url(见 RimeDeployCommand),不在本层
-    // 可测:它与工具自身的产物图绑定,临时目录夹具无从造出等价语境;端到端
-    // 通路由 RimeDeployPluginTests 覆盖(真实工具、真实 bundle)。
+    // 定位走上游访问器 RimeOpenCCData.url(见 RimeDeployCommand),与工具
+    // 自身的产物图绑定,临时目录夹具造不出等价语境;端到端通路由
+    // RimeDeployPluginTests 覆盖(真实工具、真实 bundle)。
   }
 
   /// 一次测试用完即弃的目录。

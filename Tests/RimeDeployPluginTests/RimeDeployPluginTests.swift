@@ -127,8 +127,8 @@ struct RimeDeployPluginTests {
   @Test("上游 OpenCC 垫底:数据集不带 opencc 时,上游全量集进入数据根")
   func upstreamOpenCCUnderlaysDatasetsWithoutTheirOwn() {
     // MyRimeData 夹具不带 opencc/:数据根里的转换数据整份来自 RimeOpenCCData
-    // 资源 bundle。配置(json)与词典(ocd2)各断言一类代表,不点名全量——
-    // 上游增删文件不应牵动本断言。
+    // 资源 bundle。配置(json)与词典(ocd2)各断言一个 canonical 代表,不
+    // 点名全量。
     let opencc = compiledData(named: "MyRimeData").appendingPathComponent("opencc")
     #expect(
       FileManager.default.fileExists(atPath: opencc.path),

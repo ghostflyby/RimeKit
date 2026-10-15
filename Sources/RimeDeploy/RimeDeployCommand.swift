@@ -43,12 +43,10 @@ enum RimeDeployCommand {
                           time rather than compiling, such as default.yaml or an
                           opencc/ directory. Repeat as needed.
       --upstream-opencc <dir>
-                          Base layer for the output opencc/ directory: every file
-                          under <dir> is copied there, while positions the data
-                          set itself declares (via --also-copy, per file or a
-                          whole directory) win. Use the RimeOpenCCData resource
-                          bundle's opencc/ directory to give every data root the
-                          full upstream conversion set.
+                          Base layer for the output opencc/ directory: every
+                          non-dot file under <dir> is copied there, while
+                          positions the data set itself declares (via
+                          --also-copy, per file or a whole directory) win.
       --with-upstream-opencc
                           Same, with <dir> resolved at run time from the
                           RimeOpenCCData resource bundle. This is what the

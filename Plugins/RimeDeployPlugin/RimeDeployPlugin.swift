@@ -41,10 +41,8 @@ private struct PluginDiagnostics: Error, CustomStringConvertible {
 /// 随包分发;声明的路径必须存在,不存在即构建报错。
 ///
 /// librime-xcframework 另把 OpenCC 全量数据作为 `RimeOpenCCData` 资源 bundle
-/// 分发。插件给每条部署命令带上 `--with-upstream-opencc`,部署工具在**运行期**
-/// 定位 bundle 并把全量集垫底进数据根:数据集自带的 `opencc/` 逐文件优先,
-/// 没有的文件由上游补全,任何 schema 的 simplifier 由此开箱即用,不依赖数据
-/// 集作者记得随带 ocd2。插件只传旗标,定位由部署工具运行期自理。
+/// 分发:插件给每条部署命令带上 `--with-upstream-opencc`,数据集自带的
+/// `opencc/` 优先,没有的文件由上游补全。
 ///
 /// 数据目录靠查找 `*.schema.yaml` 定位,而不是靠名字:target 内**每个**直接
 /// 含有 `*.schema.yaml` 的目录都是一个数据集,各编译一份、各以其目录名进

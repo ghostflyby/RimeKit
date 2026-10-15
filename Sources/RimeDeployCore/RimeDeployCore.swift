@@ -48,12 +48,12 @@ public struct RimeDeployRequest: Sendable {
   /// 东西:`default.yaml`、`opencc/` 之类。
   public var alsoCopy: [String]
   /// 上游 OpenCC 数据目录(资源 bundle 里的 `opencc/`),作为输出 `opencc/`
-  /// 的垫底层:数据集自带的文件逐文件优先,数据集没有的文件由上游补全——
-  /// librime 按 `<shared>/opencc/<名字>` 解析 simplifier 的配置,数据根里
-  /// 没有全量集时简繁转换静默失效。nil = 不垫底。
+  /// 的垫底层:声明覆盖的位置不动,其余由上游补全——数据集可以整目录声明
+  /// `opencc/` 拿走整个子树,也可以逐文件声明、由上游补齐其余。librime 按
+  /// `<shared>/opencc/<名字>` 解析 simplifier 的配置。nil = 不垫底。
   ///
-  /// 注意声明语义:垫底返回值计入声明集,声明集非空即激活清扫——只给本项
-  /// 而不给 `--expect`/`--also-copy` 的调用,输出目录里其余未声明文件会被清除
+  /// 垫底所得计入声明集(清扫据此保留)。声明集非空即激活清扫:只给本项
+  /// 而不给 `expected`/`alsoCopy` 的调用,输出目录里其余未声明文件会被清除
   /// (与完全零声明时"清扫全面禁用"不同)。
   public var upstreamOpenCC: String?
   /// 以 INFO 而非 WARNING 级别记录日志。
@@ -152,6 +152,10 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
   let outDir = try makeDirectory(request.outputDirectory, "--out-dir")
   let workDir = try makeDirectory(
     request.workDirectory ?? (request.outputDirectory + "-work"), "--work-dir")
+  // 路径校验先于部署:拼错的输入应当立即报错,而不是跑完一整轮编译。
+  if let upstream = request.upstreamOpenCC {
+    try validateUpstreamOpenCC(upstream)
+  }
 
   let traits = RimeTraits(
     sharedDataDir: dataDir,
@@ -248,10 +252,8 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
     throw RimeDeployError("\(error)")
   }
 
-  // 上游 OpenCC 全量集垫底:数据集自带者已由 also-copy 以同名进根,逐文件
-  // 优先;其余由上游补全。返回值并入声明集——这些文件是本工具的产出,否则
-  // 二轮部署的清扫会把垫底当成陈旧物删掉。复制在部署终局之后进行:纯文件
-  // 操作,不碰 librime 状态,失败照样以构建错误上报。
+  // 上游 OpenCC 全量集垫底:声明覆盖者不动,其余补全;复制所得并入声明集。
+  // 复制在部署终局之后。
   let upstreamCopied =
     try request.upstreamOpenCC.map {
       try copyUpstreamOpenCC(from: $0, into: outDir, datasetProvided: Set(request.alsoCopy))
@@ -318,14 +320,8 @@ private func copyThrough(name: String, from dataDir: String, to outDir: String) 
   }
 }
 
-/// 上游 OpenCC 数据垫底:把 `source`(资源 bundle 里的 `opencc/`)下的每个
-/// 文件复制进输出目录的同名位置,also-copy **声明过**的位置一律不动——
-/// 数据集自带的配置与它引用的词典是作者配套的集合,覆盖意图优先;未声明的
-/// 同名遗留物则被上游覆盖(否则清扫本来也会把它们拿走)。返回实际复制的
-/// 相对路径(`opencc/` 前缀),与 also-copy 同入声明集。
-private func copyUpstreamOpenCC(
-  from source: String, into outDir: String, datasetProvided: Set<String>
-) throws -> [String] {
+/// 声明目标必须存在且是目录;消息即面向用户的诊断。
+private func validateUpstreamOpenCC(_ source: String) throws {
   var isDirectory: ObjCBool = false
   guard FileManager.default.fileExists(atPath: source, isDirectory: &isDirectory) else {
     throw RimeDeployError("--upstream-opencc does not exist: \(source)")
@@ -333,6 +329,15 @@ private func copyUpstreamOpenCC(
   guard isDirectory.boolValue else {
     throw RimeDeployError("--upstream-opencc is not a directory: \(source)")
   }
+}
+
+/// 上游 OpenCC 数据垫底:把 `source`(资源 bundle 里的 `opencc/`)下的每个
+/// 文件复制进输出目录的同名位置,声明覆盖的位置一律跳过;未声明的同名遗留
+/// 物被上游覆盖。返回实际复制的相对路径(`opencc/` 前缀),计入声明集。
+private func copyUpstreamOpenCC(
+  from source: String, into outDir: String, datasetProvided: Set<String>
+) throws -> [String] {
+  try validateUpstreamOpenCC(source)
 
   var copied: [String] = []
   for relative in relativeFilePaths(in: source).sorted() {
@@ -342,7 +347,7 @@ private func copyUpstreamOpenCC(
       !relative.split(separator: "/").contains(where: { $0.hasPrefix(".") })
     else { continue }
     let name = "opencc/\(relative)"
-    guard !isShadowedByDataset(name: name, declared: datasetProvided) else { continue }
+    guard !declarationsCover(name, in: datasetProvided) else { continue }
     let destination = "\(outDir)/\(name)"
     do {
       let parent = (destination as NSString).deletingLastPathComponent
@@ -360,15 +365,15 @@ private func copyUpstreamOpenCC(
   return copied
 }
 
-/// 数据集声明是否遮蔽该相对路径:精确命中(also-copy 逐文件),或任一祖先
-/// 目录被整目录声明(also-copy opencc 一类)。上游垫底不得覆盖数据集以任一
-/// 形式声明的位置。
+/// 声明集是否覆盖该相对路径:精确命中(also-copy 逐文件),或任一祖先目录被
+/// 整目录声明(`opencc` 覆盖 `opencc/<名字>`)。上游垫底与清扫共用此判据:
+/// 被声明覆盖的位置既不由上游覆盖,也不被清扫删除。
 ///
 /// 按斜杠前缀逐级上溯,前缀长度严格递减,无斜杠即终止。不要用
 /// `NSString.deletingLastPathComponent` 做链式判断:单段路径的父是空串,
 /// 空串的父还是空串,循环不终止。
-private func isShadowedByDataset(name: String, declared: Set<String>) -> Bool {
-  var path = Substring(name)
+private func declarationsCover(_ relative: String, in declared: Set<String>) -> Bool {
+  var path = Substring(relative)
   while true {
     if declared.contains(String(path)) { return true }
     guard let slash = path.lastIndex(of: "/") else { return false }
@@ -419,7 +424,8 @@ private func removeStaleFiles(in outDir: String, keeping declared: [String]) thr
   guard !declared.isEmpty else { return 0 }
   let expected = Set(declared)
   var removed = 0
-  for relative in relativeFilePaths(in: outDir).sorted() where !expected.contains(relative) {
+  for relative in relativeFilePaths(in: outDir).sorted()
+  where !declarationsCover(relative, in: expected) {
     do {
       try FileManager.default.removeItem(atPath: "\(outDir)/\(relative)")
       removed += 1
