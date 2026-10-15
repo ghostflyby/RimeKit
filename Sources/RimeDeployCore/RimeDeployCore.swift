@@ -7,7 +7,7 @@
 
 import Foundation
 import RimeKit
-import System
+import SystemPackage
 import os
 
 /// 构建期 Rime 部署工具:把 YAML 源编译成客户端运行期加载的二进制产物——
@@ -151,6 +151,16 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
   await deploymentGate.acquire()
   defer { deploymentGate.release() }
 
+  // 声明名恒为相对:expected 相对 staging 根,alsoCopy 相对 dataDirectory。
+  // 绝对名不能靠拼接折叠——子项按相对契约处理(FilePath 的拼接对绝对输入
+  // 有 cd 语义,会替换基准而非追加),入口直接拒绝。
+  for name in request.expected where name.isAbsolute {
+    throw RimeDeployError("--expect names are relative to --out-dir, not absolute: \(name)")
+  }
+  for name in request.alsoCopy where name.isAbsolute {
+    throw RimeDeployError("--also-copy names are relative to --data-dir, not absolute: \(name)")
+  }
+
   let dataDir = try requireDirectory(request.dataDirectory, "--data-dir")
   let outDir = try makeDirectory(request.outputDirectory, "--out-dir")
   let workDir = try makeDirectory(
@@ -285,16 +295,24 @@ private func note(_ message: String) {
 
 // 路径的两个类别:
 //
-// * `FilePath`(System)——库内一切路径的**表示与词法计算**:构造、拼接
-//   (`appending`)、父目录(`removingLastComponent`,删到空路径为止)、
+// * `FilePath`(SystemPackage)——库内路径的**表示与词法计算**:构造、拼接
+//   (pushing;对绝对输入有 cd 语义——替换基准而非追加,故声明名在入口处
+//   拒绝绝对形式)、父目录(removingLastComponent,删到空路径或根为止)、
 //   遍历产出、声明集与排序比较(不可比较,经 `.string` 定序)。纯词法、
-//   值类型、不锚定 CWD、无 Foundation 桥接。
+//   值类型、不锚定 CWD、无 Foundation 桥接。相等性为原始字节比较(String
+//   是 Unicode 规范化等价)——声明集与磁盘名须同形,混用 NFC/NFD 时同一
+//   名字可互不命中。
 // * `URL`(Foundation)——**文件系统边界**的两种用途:① FileManager 的
 //   `at:` 形态调用(createDirectory/copyItem/removeItem/
 //   contentsOfDirectory),经 `url(of:)` 转换;② 文件系统语境规范化
 //   (相对路径按 CWD 绝对化 + `standardizedFileURL` 消解 `.`/`..`),
-//   结果即刻折回 `FilePath`。`fileExists` 与 `enumerator` 仅有路径字符串
-//   形态,在调用点经 `.string` 转换——边界上仅余的 String 面。
+//   结果即刻折回 `FilePath`。
+//
+// 边界上仅余的 String 面,共三处:① `fileExists` 仅有 `atPath:` 形态;
+// ② `enumerator` 取 `atPath:` 形态以直接获得相对条目(其 `at:` 形态产出
+// 绝对 URL,还得再剥前缀);③ librime 的 C 结构体(RimeTraits)收
+// `char*`。另有 `<out>-work` 默认工作目录名一处经 String 拼后缀(FilePath
+// 无"给末段加后缀"的词法操作)。
 
 private func url(of path: FilePath) -> URL {
   URL(fileURLWithPath: path.string)
@@ -391,8 +409,8 @@ private func copyUpstreamOpenCC(
 /// 整目录声明(`opencc` 覆盖 `opencc/<名字>`)。上游垫底与清扫共用此判据:
 /// 被声明覆盖的位置既不由上游覆盖,也不被清扫删除。
 ///
-/// 沿 `removingLastComponent()` 逐级上溯,删到空路径为止——终止性由 API
-/// 承担(见 helpers 区的类别说明)。
+/// 沿 `removingLastComponent()` 逐级上溯,删到空路径或根为止——终止性由
+/// API 承担(见 helpers 区的类别说明)。
 private func declarationsCover(_ relative: FilePath, in declared: Set<FilePath>) -> Bool {
   var path = relative
   while true {
@@ -403,8 +421,8 @@ private func declarationsCover(_ relative: FilePath, in declared: Set<FilePath>)
   }
 }
 
-/// `directory` 下任意深度的全部文件,以相对路径表示(enumerator 仅有
-/// 字符串形态,产出即相对条目,见类别说明)。
+/// `directory` 下任意深度的全部文件,以相对路径表示(enumerator 取字符串
+/// 形态以直接获得相对条目,见类别说明)。
 public func relativeFilePaths(in directory: FilePath) -> [FilePath] {
   guard let walker = FileManager.default.enumerator(atPath: directory.string)
   else { return [] }

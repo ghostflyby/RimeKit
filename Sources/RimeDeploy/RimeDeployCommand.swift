@@ -8,7 +8,7 @@
 import Foundation
 import RimeDeployCore
 import RimeOpenCCData
-import System
+import SystemPackage
 
 /// `RimeDeployCore` 的命令行前端:解析 argv、执行、报告。全部逻辑都在库里,
 /// 以便测试直接调用——构建命令非零退出会中断构建,仅作为可执行文件存在的工具

@@ -33,7 +33,7 @@ import Testing
 #if os(macOS)
   import Foundation
   import RimeDeployCore
-  import System
+  import SystemPackage
 
   /// 一份健康夹具编译出的全部产物(相对 out 目录,排序后)——编译产物落
   /// `build/` 子目录,数据集根留给 also-copy 的源数据(标准 rime 目录形态,
@@ -369,6 +369,29 @@ import Testing
         let t2s = try String(
           contentsOf: fixture.out.appendingPathComponent("opencc/t2s.json"), encoding: .utf8)
         #expect(t2s == "upstream t2s")
+      }
+    }
+
+    @Test("绝对声明名被拒:拼接对绝对输入有 cd 语义,入口即报错而非静默折叠")
+    func absoluteDeclarationNamesAreRejected() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+
+        do {
+          _ = try await runRimeDeploy(
+            fixture.request(expected: [FilePath(fixture.data.path + "/probe.schema.yaml")]))
+          Issue.record("expected the absolute --expect to be rejected")
+        } catch let error as RimeDeployError {
+          #expect(error.description.contains("--expect names are relative"), "\(error)")
+        }
+        do {
+          _ = try await runRimeDeploy(
+            fixture.request(expected: ["probe.table.bin"], alsoCopy: ["/etc/hosts"]))
+          Issue.record("expected the absolute --also-copy to be rejected")
+        } catch let error as RimeDeployError {
+          #expect(error.description.contains("--also-copy names are relative"), "\(error)")
+        }
       }
     }
 
