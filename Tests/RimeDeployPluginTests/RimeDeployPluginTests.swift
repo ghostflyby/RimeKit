@@ -104,7 +104,7 @@ struct RimeDeployPluginTests {
       !files.contains(where: { $0.hasPrefix("t9_abbrev.") }), "found \(files)")
   }
 
-  @Test func nestedDataKeepsItsLayout() {
+  @Test func nestedDataKeepsItsLayout() throws {
     // 编译数据以单个目录声明,因此保留数据目录的布局——包括 librime 按名字
     // 解析的路径,如 `<shared>/opencc/<name>`。若逐个声明输出文件,它们会被
     // 摊平到资源根,结构就丢了。
@@ -112,7 +112,30 @@ struct RimeDeployPluginTests {
     #expect(
       FileManager.default.fileExists(atPath: opencc.path),
       "nested directory did not survive: \(contents(of: compiledData(named: "RimeData")))")
-    #expect(contents(of: opencc) == ["t2s.json"])
+    // 上游垫底与数据集自带并存:TSCharacters.ocd2 来自 RimeOpenCCData 资源
+    // bundle,t2s.json 是数据集夹具;同名者逐文件以数据集为准——内容仍是
+    // 夹具存根,而非上游真身。
+    let files = contents(of: opencc)
+    #expect(files.contains("t2s.json"), "found \(files)")
+    #expect(files.contains("TSCharacters.ocd2"), "上游垫底未进入数据根: found \(files)")
+    let t2s = try String(contentsOf: opencc.appendingPathComponent("t2s.json"), encoding: .utf8)
+    // 夹具存根整字节断言(含尾部换行):进根的是数据集的文件,而非上游同名
+    // 的真配置。
+    #expect(t2s == "{\"name\":\"t2s\"}\n")
+  }
+
+  @Test("上游 OpenCC 垫底:数据集不带 opencc 时,上游全量集进入数据根")
+  func upstreamOpenCCUnderlaysDatasetsWithoutTheirOwn() {
+    // MyRimeData 夹具不带 opencc/:数据根里的转换数据整份来自 RimeOpenCCData
+    // 资源 bundle。配置(json)与词典(ocd2)各断言一个 canonical 代表,不
+    // 点名全量。
+    let opencc = compiledData(named: "MyRimeData").appendingPathComponent("opencc")
+    #expect(
+      FileManager.default.fileExists(atPath: opencc.path),
+      "上游垫底未产出 opencc/: \(contents(of: compiledData(named: "MyRimeData")))")
+    let files = contents(of: opencc)
+    #expect(files.contains("s2t.json"), "found \(files)")
+    #expect(files.contains("STCharacters.ocd2"), "found \(files)")
   }
 
   @Test("RUNTIME_FILES 边车:声明的运行期文件随包分发(词典默认只活在编译期)")

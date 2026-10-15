@@ -47,6 +47,15 @@ public struct RimeDeployRequest: Sendable {
   /// `build/` 里的编译产物并列)。用于 librime 在**运行期**按路径读取的
   /// 东西:`default.yaml`、`opencc/` 之类。
   public var alsoCopy: [String]
+  /// 上游 OpenCC 数据目录(资源 bundle 里的 `opencc/`),作为输出 `opencc/`
+  /// 的垫底层:声明覆盖的位置不动,其余由上游补全——数据集可以整目录声明
+  /// `opencc/` 拿走整个子树,也可以逐文件声明、由上游补齐其余。librime 按
+  /// `<shared>/opencc/<名字>` 解析 simplifier 的配置。nil = 不垫底。
+  ///
+  /// 垫底所得计入声明集(清扫据此保留)。声明集非空即激活清扫:只给本项
+  /// 而不给 `expected`/`alsoCopy` 的调用,输出目录里其余未声明文件会被清除
+  /// (与完全零声明时"清扫全面禁用"不同)。
+  public var upstreamOpenCC: String?
   /// 以 INFO 而非 WARNING 级别记录日志。
   public var verbose: Bool
 
@@ -57,6 +66,7 @@ public struct RimeDeployRequest: Sendable {
     mode: RimeDeployMode = .prebuild,
     expected: [String] = [],
     alsoCopy: [String] = [],
+    upstreamOpenCC: String? = nil,
     verbose: Bool = false
   ) {
     self.dataDirectory = dataDirectory
@@ -65,6 +75,7 @@ public struct RimeDeployRequest: Sendable {
     self.mode = mode
     self.expected = expected
     self.alsoCopy = alsoCopy
+    self.upstreamOpenCC = upstreamOpenCC
     self.verbose = verbose
   }
 }
@@ -141,6 +152,10 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
   let outDir = try makeDirectory(request.outputDirectory, "--out-dir")
   let workDir = try makeDirectory(
     request.workDirectory ?? (request.outputDirectory + "-work"), "--work-dir")
+  // 路径校验先于部署:拼错的输入应当立即报错,而不是跑完一整轮编译。
+  if let upstream = request.upstreamOpenCC {
+    try validateUpstreamOpenCC(upstream)
+  }
 
   let traits = RimeTraits(
     sharedDataDir: dataDir,
@@ -237,12 +252,20 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
     throw RimeDeployError("\(error)")
   }
 
-  // expected 以 staging 根(build/)为基准;also-copy 在数据集根。两者合并
-  // 构成输出目录的完整保留集。
-  let stagedExpected = request.expected.map { "build/" + $0 }
-  let removed = try removeStaleFiles(in: outDir, keeping: stagedExpected + request.alsoCopy)
+  // 上游 OpenCC 全量集垫底:声明覆盖者不动,其余补全;复制所得并入声明集。
+  // 复制在部署终局之后。
+  let upstreamCopied =
+    try request.upstreamOpenCC.map {
+      try copyUpstreamOpenCC(from: $0, into: outDir, datasetProvided: Set(request.alsoCopy))
+    } ?? []
 
-  let missing = missingArtifacts(in: outDir, expected: stagedExpected + request.alsoCopy)
+  // expected 以 staging 根(build/)为基准;also-copy 与上游垫底在数据集根。
+  // 三者合并构成输出目录的完整保留集。
+  let stagedExpected = request.expected.map { "build/" + $0 }
+  let keeping = stagedExpected + request.alsoCopy + upstreamCopied
+  let removed = try removeStaleFiles(in: outDir, keeping: keeping)
+
+  let missing = missingArtifacts(in: outDir, expected: keeping)
   guard missing.isEmpty else {
     throw RimeDeployError(describeMissing(missing, in: outDir))
   }
@@ -297,6 +320,67 @@ private func copyThrough(name: String, from dataDir: String, to outDir: String) 
   }
 }
 
+/// 声明目标必须存在且是目录;消息即面向用户的诊断。
+private func validateUpstreamOpenCC(_ source: String) throws {
+  var isDirectory: ObjCBool = false
+  guard FileManager.default.fileExists(atPath: source, isDirectory: &isDirectory) else {
+    throw RimeDeployError("--upstream-opencc does not exist: \(source)")
+  }
+  guard isDirectory.boolValue else {
+    throw RimeDeployError("--upstream-opencc is not a directory: \(source)")
+  }
+}
+
+/// 上游 OpenCC 数据垫底:把 `source`(资源 bundle 里的 `opencc/`)下的每个
+/// 文件复制进输出目录的同名位置,声明覆盖的位置一律跳过;未声明的同名遗留
+/// 物被上游覆盖。返回实际复制的相对路径(`opencc/` 前缀),计入声明集。
+private func copyUpstreamOpenCC(
+  from source: String, into outDir: String, datasetProvided: Set<String>
+) throws -> [String] {
+  try validateUpstreamOpenCC(source)
+
+  var copied: [String] = []
+  for relative in relativeFilePaths(in: source).sorted() {
+    // 点文件/点目录不垫底(与插件输入侧同规):bundle 混入的 .DS_Store 之类
+    // 不该随全量集分发,更不该受声明集保护、永不清扫。
+    guard
+      !relative.split(separator: "/").contains(where: { $0.hasPrefix(".") })
+    else { continue }
+    let name = "opencc/\(relative)"
+    guard !declarationsCover(name, in: datasetProvided) else { continue }
+    let destination = "\(outDir)/\(name)"
+    do {
+      let parent = (destination as NSString).deletingLastPathComponent
+      try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+      if FileManager.default.fileExists(atPath: destination) {
+        try FileManager.default.removeItem(atPath: destination)
+      }
+      try FileManager.default.copyItem(atPath: "\(source)/\(relative)", toPath: destination)
+      copied.append(name)
+    } catch {
+      throw RimeDeployError(
+        "cannot copy upstream opencc \(relative) into \(outDir): \(error.localizedDescription)")
+    }
+  }
+  return copied
+}
+
+/// 声明集是否覆盖该相对路径:精确命中(also-copy 逐文件),或任一祖先目录被
+/// 整目录声明(`opencc` 覆盖 `opencc/<名字>`)。上游垫底与清扫共用此判据:
+/// 被声明覆盖的位置既不由上游覆盖,也不被清扫删除。
+///
+/// 按斜杠前缀逐级上溯,前缀长度严格递减,无斜杠即终止。不要用
+/// `NSString.deletingLastPathComponent` 做链式判断:单段路径的父是空串,
+/// 空串的父还是空串,循环不终止。
+private func declarationsCover(_ relative: String, in declared: Set<String>) -> Bool {
+  var path = Substring(relative)
+  while true {
+    if declared.contains(String(path)) { return true }
+    guard let slash = path.lastIndex(of: "/") else { return false }
+    path = path[..<slash]
+  }
+}
+
 /// `directory` 下任意深度的全部文件,以相对路径表示。
 public func relativeFilePaths(in directory: String) -> [String] {
   guard let walker = FileManager.default.enumerator(atPath: directory) else { return [] }
@@ -340,7 +424,8 @@ private func removeStaleFiles(in outDir: String, keeping declared: [String]) thr
   guard !declared.isEmpty else { return 0 }
   let expected = Set(declared)
   var removed = 0
-  for relative in relativeFilePaths(in: outDir).sorted() where !expected.contains(relative) {
+  for relative in relativeFilePaths(in: outDir).sorted()
+  where !declarationsCover(relative, in: expected) {
     do {
       try FileManager.default.removeItem(atPath: "\(outDir)/\(relative)")
       removed += 1

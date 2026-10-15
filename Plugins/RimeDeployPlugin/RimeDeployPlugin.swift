@@ -40,6 +40,10 @@ private struct PluginDiagnostics: Error, CustomStringConvertible {
 /// lua 脚本在运行期按路径读取的词典(如万象 dicts/cuoyin.dict.yaml)必须
 /// 随包分发;声明的路径必须存在,不存在即构建报错。
 ///
+/// librime-xcframework 另把 OpenCC 全量数据作为 `RimeOpenCCData` 资源 bundle
+/// 分发:插件给每条部署命令带上 `--with-upstream-opencc`,数据集自带的
+/// `opencc/` 优先,没有的文件由上游补全。
+///
 /// 数据目录靠查找 `*.schema.yaml` 定位,而不是靠名字:target 内**每个**直接
 /// 含有 `*.schema.yaml` 的目录都是一个数据集,各编译一份、各以其目录名进
 /// bundle(目录名互异,故互不撞车)。零个说明插件挂在了不带 Rime 数据的
@@ -160,6 +164,7 @@ struct RimeDeployPlugin: BuildToolPlugin {
       ]
       + expected.sorted().flatMap { ["--expect", $0] }
       + copied.flatMap { ["--also-copy", $0] }
+      + ["--with-upstream-opencc"]
 
     return .buildCommand(
       displayName: "Compiling Rime data \(name) in \(target.name)",

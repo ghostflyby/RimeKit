@@ -7,6 +7,7 @@
 
 import Foundation
 import RimeDeployCore
+import RimeOpenCCData
 
 /// `RimeDeployCore` 的命令行前端:解析 argv、执行、报告。全部逻辑都在库里,
 /// 以便测试直接调用——构建命令非零退出会中断构建,仅作为可执行文件存在的工具
@@ -41,6 +42,16 @@ enum RimeDeployCommand {
                           creating parent directories. For data librime reads at run
                           time rather than compiling, such as default.yaml or an
                           opencc/ directory. Repeat as needed.
+      --upstream-opencc <dir>
+                          Base layer for the output opencc/ directory: every
+                          non-dot file under <dir> is copied there, while
+                          positions the data set itself declares (via
+                          --also-copy, per file or a whole directory) win.
+      --with-upstream-opencc
+                          Same, with <dir> resolved at run time from the
+                          RimeOpenCCData resource bundle. This is what the
+                          build plugin passes. If it does not suit you,
+                          --upstream-opencc is the escape hatch.
       --verbose           Log at INFO instead of WARNING.
       -h, --help          Show this message.
 
@@ -55,6 +66,7 @@ enum RimeDeployCommand {
     var verbose = false
     var expected: [String] = []
     var alsoCopy: [String] = []
+    var upstreamOpenCC: String?
 
     let arguments = Array(CommandLine.arguments.dropFirst())
     var index = 0
@@ -78,6 +90,9 @@ enum RimeDeployCommand {
         mode = parsed
       case "--expect": expected.append(nextValue(argument))
       case "--also-copy": alsoCopy.append(nextValue(argument))
+      case "--upstream-opencc": upstreamOpenCC = nextValue(argument)
+      case "--with-upstream-opencc":
+        upstreamOpenCC = RimeOpenCCData.url.path
       case "--verbose": verbose = true
       case "-h", "--help":
         print(usage)
@@ -102,6 +117,7 @@ enum RimeDeployCommand {
       mode: mode,
       expected: expected,
       alsoCopy: alsoCopy,
+      upstreamOpenCC: upstreamOpenCC,
       verbose: verbose
     )
 
