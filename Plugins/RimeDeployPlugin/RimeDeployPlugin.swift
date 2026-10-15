@@ -44,12 +44,7 @@ private struct PluginDiagnostics: Error, CustomStringConvertible {
 /// 分发。插件给每条部署命令带上 `--with-upstream-opencc`,部署工具在**运行期**
 /// 定位 bundle 并把全量集垫底进数据根:数据集自带的 `opencc/` 逐文件优先,
 /// 没有的文件由上游补全,任何 schema 的 simplifier 由此开箱即用,不依赖数据
-/// 集作者记得随带 ocd2。定位不放在插件侧是有实证的:Xcode 给构建工具插件的
-/// 工具路径是未展开的构建设置宏,规划期无从枚举 bundle;而 bundle 随工具
-/// 可执行落盘(SwiftPM 与 Xcode 两种构建布局皆然,
-/// `Build/Products/<config>/<包名>_<目标名>.bundle`),工具以纯 POSIX 扫描
-/// 兄弟目录解析它(不经 Bundle/CFBundle,显式、可测),定位失败则以非零退出
-/// 中断构建。
+/// 集作者记得随带 ocd2。插件只传旗标,定位由部署工具运行期自理。
 ///
 /// 数据目录靠查找 `*.schema.yaml` 定位,而不是靠名字:target 内**每个**直接
 /// 含有 `*.schema.yaml` 的目录都是一个数据集,各编译一份、各以其目录名进

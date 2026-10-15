@@ -118,11 +118,7 @@ let package = Package(
       name: "RimeDeploy",
       dependencies: [
         "RimeDeployCore",
-        // 上游 OpenCC 数据:依赖即声明——bundle 随工具可执行落盘(SwiftPM 与
-        // Xcode 两种构建布局实证),工具运行期以纯 POSIX 扫描兄弟目录定位
-        // (RimeDeployCore.locateUpstreamOpenCC),不经 Bundle/CFBundle:显式、
-        // 可测,少一层服务依赖。插件无法在规划期定位 bundle(Xcode 给插件的
-        // 工具路径是未展开的构建设置宏,实证),故只传旗标。依赖只进构建工具,
+        // 上游 OpenCC 数据:资源 bundle 随工具产物图落盘,只进构建工具,
         // 不进任何运行期消费方。
         .product(name: "RimeOpenCCData", package: "librime-xcframework"),
       ]),

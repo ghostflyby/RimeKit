@@ -7,6 +7,7 @@
 
 import Foundation
 import RimeDeployCore
+import RimeOpenCCData
 
 /// `RimeDeployCore` 的命令行前端:解析 argv、执行、报告。全部逻辑都在库里,
 /// 以便测试直接调用——构建命令非零退出会中断构建,仅作为可执行文件存在的工具
@@ -49,17 +50,10 @@ enum RimeDeployCommand {
                           bundle's opencc/ directory to give every data root the
                           full upstream conversion set.
       --with-upstream-opencc
-                          Same, with <dir> resolved at run time by scanning the
-                          directory beside this tool's own executable for the
-                          RimeOpenCCData resource bundle (plain POSIX directory
-                          scan, no Bundle/Foundation service lookups). This is
-                          what the build plugin passes: a build tool plugin
-                          cannot locate the bundle while planning (Xcode hands
-                          it unexpanded build-setting macros), while the running
-                          tool finds the bundle beside its executable in both
-                          supported build layouts (SwiftPM and Xcode). If
-                          neither flag suits you, --upstream-opencc is the
-                          escape hatch.
+                          Same, with <dir> resolved at run time from the
+                          RimeOpenCCData resource bundle. This is what the
+                          build plugin passes. If it does not suit you,
+                          --upstream-opencc is the escape hatch.
       --verbose           Log at INFO instead of WARNING.
       -h, --help          Show this message.
 
@@ -100,17 +94,7 @@ enum RimeDeployCommand {
       case "--also-copy": alsoCopy.append(nextValue(argument))
       case "--upstream-opencc": upstreamOpenCC = nextValue(argument)
       case "--with-upstream-opencc":
-        // 运行期按可执行兄弟目录定位随工具落盘的资源 bundle(纯 POSIX 扫描,
-        // 刻意不走 Bundle/CFBundle——沙盒语境下 CarbonCore checkin 故障类,
-        // 见 locateUpstreamOpenCC 注释)。定位失败即当场非零退出:构建失败,
-        // 而不是让消费方部署一份简繁转换静默失效的数据。
-        do {
-          upstreamOpenCC = try locateUpstreamOpenCC(executablePath: CommandLine.arguments[0])
-        } catch let error as RimeDeployError {
-          fail(error.description)
-        } catch {
-          fail("\(error)")
-        }
+        upstreamOpenCC = RimeOpenCCData.url.path
       case "--verbose": verbose = true
       case "-h", "--help":
         print(usage)

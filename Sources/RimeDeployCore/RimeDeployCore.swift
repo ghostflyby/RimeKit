@@ -364,11 +364,9 @@ private func copyUpstreamOpenCC(
 /// 目录被整目录声明(also-copy opencc 一类)。上游垫底不得覆盖数据集以任一
 /// 形式声明的位置。
 ///
-/// 按斜杠前缀逐级上溯,Substring 不产生新字符串;前缀长度严格递减,到没有
-/// 斜杠即终止。不得改用 `NSString.deletingLastPathComponent` 链式判断:
-/// 单段路径(如 `opencc`)删出的父是空串,而空串的父还是空串,永远不落在
-/// 终止条件上——2026-10-15 实证该写法使工具进程无限循环、逐轮泄漏桥接对象,
-/// 被内核按内存压力击杀于 155GB。
+/// 按斜杠前缀逐级上溯,前缀长度严格递减,无斜杠即终止。不要用
+/// `NSString.deletingLastPathComponent` 做链式判断:单段路径的父是空串,
+/// 空串的父还是空串,循环不终止。
 private func isShadowedByDataset(name: String, declared: Set<String>) -> Bool {
   var path = Substring(name)
   while true {
@@ -376,48 +374,6 @@ private func isShadowedByDataset(name: String, declared: Set<String>) -> Bool {
     guard let slash = path.lastIndex(of: "/") else { return false }
     path = path[..<slash]
   }
-}
-
-/// 定位随工具落盘的 RimeOpenCCData 资源 bundle 里的 `opencc/` 目录。
-///
-/// 依赖即声明:bundle 是工具可执行的构建依赖(Package.swift),SwiftPM 与
-/// Xcode 两种构建布局都把它产在可执行旁(`Librime_RimeOpenCCData.bundle`,
-/// 深浅两种形态皆有)。按内容扫描可执行的兄弟目录定位,不经 Bundle/CFBundle:
-/// 纯 POSIX 扫描显式、可测,工具对 LaunchServices 服务零依赖。(旁注:工具在
-/// 构建沙盒下每次运行会打一条 CarbonCore checkin fault——coreservicesd 的
-/// lookup 被沙盒拒绝;实证良性,与任何内存问题无因果,勿作故障信号。)
-///
-/// `executablePath` 为调用方传入的 argv[0](构建系统恒传绝对路径,相对路径
-/// 按当前目录补全);找不到或多于一个候选都报错——simplifier 缺数据的失效是
-/// 运行期静默的,必须在构建期喊出来。
-public func locateUpstreamOpenCC(executablePath: String) throws -> String {
-  var executable = executablePath
-  if !executable.hasPrefix("/") {
-    executable = FileManager.default.currentDirectoryPath + "/" + executable
-  }
-  let directory = (executable as NSString).deletingLastPathComponent
-  let names =
-    (try? FileManager.default.contentsOfDirectory(atPath: directory))?
-    .filter { $0.hasSuffix(".bundle") && $0.contains("RimeOpenCCData") } ?? []
-  guard names.count == 1, let name = names.first else {
-    throw RimeDeployError(
-      "cannot locate the RimeOpenCCData resource bundle beside the deploy tool: expected "
-        + "exactly one *RimeOpenCCData*.bundle in \(directory), found: "
-        + "\(names.sorted().joined(separator: ", "))")
-  }
-  // 深浅两种 bundle 形态:SwiftPM 现代浅 bundle 资源在根,Xcode 产物的资源
-  // 在 Contents/Resources 一层(实证:本包构建产物为深形态)。
-  for candidate in ["opencc", "Contents/Resources/opencc"] {
-    let path = "\(directory)/\(name)/\(candidate)"
-    var isDirectory: ObjCBool = false
-    if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
-      isDirectory.boolValue
-    {
-      return path
-    }
-  }
-  throw RimeDeployError(
-    "RimeOpenCCData bundle has no opencc/ directory: \(directory)/\(name)")
 }
 
 /// `directory` 下任意深度的全部文件,以相对路径表示。

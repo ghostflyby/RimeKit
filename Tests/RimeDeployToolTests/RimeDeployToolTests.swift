@@ -371,49 +371,11 @@ import Testing
       }
     }
 
-    // MARK: - 上游 bundle 定位(纯 POSIX 扫描,不经部署流程、不碰 librime)
+    // MARK: - 上游 bundle 定位
 
-    @Test("上游 bundle 定位:可执行旁唯一 *RimeOpenCCData*.bundle,深形态解析到 Contents/Resources/opencc")
-    func locateUpstreamOpenCCResolvesDeepBundleBesideExecutable() throws {
-      let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("rime-locate-\(UUID().uuidString)")
-      defer { try? FileManager.default.removeItem(at: root) }
-      let tool = root.appendingPathComponent("RimeDeploy")
-      try FileManager.default.createDirectory(at: tool, withIntermediateDirectories: true)
-      let opencc =
-        root
-        .appendingPathComponent("Librime_RimeOpenCCData.bundle", isDirectory: true)
-        .appendingPathComponent("Contents")
-        .appendingPathComponent("Resources")
-        .appendingPathComponent("opencc", isDirectory: true)
-      try FileManager.default.createDirectory(at: opencc, withIntermediateDirectories: true)
-      try "x".write(
-        to: opencc.appendingPathComponent("s2t.json"), atomically: true, encoding: .utf8)
-
-      let located = try locateUpstreamOpenCC(executablePath: tool.path)
-
-      #expect(located.hasSuffix("opencc"), "\(located)")
-      #expect(
-        FileManager.default.fileExists(atPath: located + "/s2t.json"), "\(located)")
-    }
-
-    @Test("上游 bundle 定位:缺席即报错(构建期喊出来)")
-    func locateUpstreamOpenCCWithoutBundleFails() {
-      let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("rime-locate-\(UUID().uuidString)")
-      defer { try? FileManager.default.removeItem(at: root) }
-      let tool = root.appendingPathComponent("RimeDeploy")
-      try? FileManager.default.createDirectory(at: tool, withIntermediateDirectories: true)
-
-      do {
-        _ = try locateUpstreamOpenCC(executablePath: tool.path)
-        Issue.record("expected the lookup to fail")
-      } catch let error as RimeDeployError {
-        #expect(error.description.contains("cannot locate the RimeOpenCCData resource bundle"))
-      } catch {
-        Issue.record("unexpected error type: \(error)")
-      }
-    }
+    // 定位走上游访问器 RimeOpenCCData.url(见 RimeDeployCommand),不在本层
+    // 可测:它与工具自身的产物图绑定,临时目录夹具无从造出等价语境;端到端
+    // 通路由 RimeDeployPluginTests 覆盖(真实工具、真实 bundle)。
   }
 
   /// 一次测试用完即弃的目录。
