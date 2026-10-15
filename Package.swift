@@ -52,7 +52,8 @@ let package = Package(
     .package(
       url: "https://github.com/ghostflyby/librime-xcframework", from: "1.17.0-pack.10.0.0"),
     // 依赖经 `.when(platforms: [.macOS])` 条件化:构建 iOS 时 SwiftXPC 不进入依赖图(§2.5)。
-    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.8.2")
+    .package(url: "https://github.com/ghostflyby/SwiftXPC.git", from: "0.8.2"),
+    .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1")
   ],
   targets: [
     // librime C API 的包内转出口:C 模块名 Rime 与 RimeKit 的分布式 actor Rime 同名,
@@ -112,12 +113,14 @@ let package = Package(
       dependencies: [
         "RimeKit",
         "RimeKitLinkageStatic",
+        .product(name: "SystemPackage", package: "swift-system"),
       ]),
     // 命令行外壳:解析 argv、执行、报告。全部逻辑在库里以便测试直接调用。
     .executableTarget(
       name: "RimeDeploy",
       dependencies: [
         "RimeDeployCore",
+        .product(name: "SystemPackage", package: "swift-system"),
         // 上游 OpenCC 数据:资源 bundle 随工具产物图落盘,只进构建工具,
         // 不进任何运行期消费方。
         .product(name: "RimeOpenCCData", package: "librime-xcframework"),
@@ -142,6 +145,7 @@ let package = Package(
         .target(
           name: "RimeDeployCore",
           condition: .when(platforms: [.macOS])),
+        .product(name: "SystemPackage", package: "swift-system"),
       ]),
     .testTarget(
       name: "RimeKitTests",

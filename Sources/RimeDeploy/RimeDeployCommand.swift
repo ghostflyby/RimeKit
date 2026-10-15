@@ -8,6 +8,7 @@
 import Foundation
 import RimeDeployCore
 import RimeOpenCCData
+import SystemPackage
 
 /// `RimeDeployCore` 的命令行前端:解析 argv、执行、报告。全部逻辑都在库里,
 /// 以便测试直接调用——构建命令非零退出会中断构建,仅作为可执行文件存在的工具
@@ -59,14 +60,14 @@ enum RimeDeployCommand {
     """
 
   static func main() async {
-    var dataDirectory: String?
-    var outputDirectory: String?
-    var workDirectory: String?
+    var dataDirectory: FilePath?
+    var outputDirectory: FilePath?
+    var workDirectory: FilePath?
     var mode = RimeDeployMode.prebuild
     var verbose = false
-    var expected: [String] = []
-    var alsoCopy: [String] = []
-    var upstreamOpenCC: String?
+    var expected: [FilePath] = []
+    var alsoCopy: [FilePath] = []
+    var upstreamOpenCC: FilePath?
 
     let arguments = Array(CommandLine.arguments.dropFirst())
     var index = 0
@@ -79,20 +80,20 @@ enum RimeDeployCommand {
     while index < arguments.count {
       let argument = arguments[index]
       switch argument {
-      case "--data-dir": dataDirectory = nextValue(argument)
-      case "--out-dir": outputDirectory = nextValue(argument)
-      case "--work-dir": workDirectory = nextValue(argument)
+      case "--data-dir": dataDirectory = FilePath(nextValue(argument))
+      case "--out-dir": outputDirectory = FilePath(nextValue(argument))
+      case "--work-dir": workDirectory = FilePath(nextValue(argument))
       case "--mode":
         let value = nextValue(argument)
         guard let parsed = RimeDeployMode(rawValue: value) else {
           fail("--mode must be 'prebuild' or 'deploy', not '\(value)'")
         }
         mode = parsed
-      case "--expect": expected.append(nextValue(argument))
-      case "--also-copy": alsoCopy.append(nextValue(argument))
-      case "--upstream-opencc": upstreamOpenCC = nextValue(argument)
+      case "--expect": expected.append(FilePath(nextValue(argument)))
+      case "--also-copy": alsoCopy.append(FilePath(nextValue(argument)))
+      case "--upstream-opencc": upstreamOpenCC = FilePath(nextValue(argument))
       case "--with-upstream-opencc":
-        upstreamOpenCC = RimeOpenCCData.url.path
+        upstreamOpenCC = FilePath(RimeOpenCCData.url.path)
       case "--verbose": verbose = true
       case "-h", "--help":
         print(usage)
@@ -126,8 +127,10 @@ enum RimeDeployCommand {
       if expected.isEmpty {
         // 没有 --expect 就没有校验过产物;明确说出来,而不是报告一个可能被读成
         // "产物都在"的成功。
-        let listing = relativeFilePaths(in: request.outputDirectory).sorted()
-        let body = listing.map { "  " + $0 }.joined(separator: "\n")
+        let listing = relativeFilePaths(in: request.outputDirectory).sorted(by: {
+          $0.string < $1.string
+        })
+        let body = listing.map { "  " + $0.string }.joined(separator: "\n")
         note(
           """
           compilation succeeded, but no --expect names were given, so nothing was \

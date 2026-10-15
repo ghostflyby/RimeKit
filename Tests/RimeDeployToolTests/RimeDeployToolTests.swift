@@ -33,6 +33,7 @@ import Testing
 #if os(macOS)
   import Foundation
   import RimeDeployCore
+  import SystemPackage
 
   /// 一份健康夹具编译出的全部产物(相对 out 目录,排序后)——编译产物落
   /// `build/` 子目录,数据集根留给 also-copy 的源数据(标准 rime 目录形态,
@@ -295,7 +296,7 @@ import Testing
             "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
           ],
           alsoCopy: ["opencc/t2s.json"],
-          upstreamOpenCC: upstream.path)
+          upstreamOpenCC: FilePath(upstream.path))
         _ = try await runRimeDeploy(request)
         // 二轮部署幂等:垫底者同入声明集,清扫不得把上游补全当陈旧物删除。
         let outcome = try await runRimeDeploy(request)
@@ -330,7 +331,7 @@ import Testing
             "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
           ],
           alsoCopy: ["opencc"],
-          upstreamOpenCC: upstream.path)
+          upstreamOpenCC: FilePath(upstream.path))
         _ = try await runRimeDeploy(request)
         let outcome = try await runRimeDeploy(request)
 
@@ -360,7 +361,7 @@ import Testing
           expected: [
             "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
           ],
-          upstreamOpenCC: upstream.path)
+          upstreamOpenCC: FilePath(upstream.path))
         _ = try await runRimeDeploy(request)
         let outcome = try await runRimeDeploy(request)
 
@@ -368,6 +369,29 @@ import Testing
         let t2s = try String(
           contentsOf: fixture.out.appendingPathComponent("opencc/t2s.json"), encoding: .utf8)
         #expect(t2s == "upstream t2s")
+      }
+    }
+
+    @Test("绝对声明名被拒:拼接对绝对输入有 cd 语义,入口即报错而非静默折叠")
+    func absoluteDeclarationNamesAreRejected() async {
+      await #expect(processExitsWith: .success) {
+        let fixture = try makeHealthyFixture()
+        defer { fixture.remove() }
+
+        do {
+          _ = try await runRimeDeploy(
+            fixture.request(expected: [FilePath(fixture.data.path + "/probe.schema.yaml")]))
+          Issue.record("expected the absolute --expect to be rejected")
+        } catch let error as RimeDeployError {
+          #expect(error.description.contains("--expect names are relative"), "\(error)")
+        }
+        do {
+          _ = try await runRimeDeploy(
+            fixture.request(expected: ["probe.table.bin"], alsoCopy: ["/etc/hosts"]))
+          Issue.record("expected the absolute --also-copy to be rejected")
+        } catch let error as RimeDeployError {
+          #expect(error.description.contains("--also-copy names are relative"), "\(error)")
+        }
       }
     }
 
@@ -380,7 +404,8 @@ import Testing
           _ = try await runRimeDeploy(
             fixture.request(
               expected: ["probe.table.bin"],
-              upstreamOpenCC: fixture.root.appendingPathComponent("absent").path))
+              upstreamOpenCC: FilePath(
+                fixture.root.appendingPathComponent("absent").path)))
           Issue.record("expected the deployment to be rejected")
         } catch let error as RimeDeployError {
           #expect(error.description.contains("--upstream-opencc does not exist"))
@@ -397,7 +422,8 @@ import Testing
 
         do {
           _ = try await runRimeDeploy(
-            fixture.request(expected: ["probe.table.bin"], upstreamOpenCC: filePath.path))
+            fixture.request(
+              expected: ["probe.table.bin"], upstreamOpenCC: FilePath(filePath.path)))
           Issue.record("expected the deployment to be rejected")
         } catch let error as RimeDeployError {
           #expect(error.description.contains("--upstream-opencc is not a directory"))
@@ -419,7 +445,7 @@ import Testing
             expected: [
               "probe.schema.yaml", "probe.table.bin", "probe.prism.bin", "probe.reverse.bin",
             ],
-            upstreamOpenCC: upstream.path))
+            upstreamOpenCC: FilePath(upstream.path)))
 
         #expect(outcome.verifiedArtifacts == 4)
         let files = fixture.files(in: fixture.out)
@@ -497,15 +523,15 @@ import Testing
 
     /// 针对这些目录的部署请求(退出测试进程内直接调用)。
     func request(
-      expected: [String] = [],
-      alsoCopy: [String] = [],
-      upstreamOpenCC: String? = nil,
+      expected: [FilePath] = [],
+      alsoCopy: [FilePath] = [],
+      upstreamOpenCC: FilePath? = nil,
       mode: RimeDeployMode = .prebuild
     ) -> RimeDeployRequest {
       RimeDeployRequest(
-        dataDirectory: data.path,
-        outputDirectory: out.path,
-        workDirectory: work.path,
+        dataDirectory: FilePath(data.path),
+        outputDirectory: FilePath(out.path),
+        workDirectory: FilePath(work.path),
         mode: mode,
         expected: expected,
         alsoCopy: alsoCopy,
