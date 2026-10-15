@@ -7,6 +7,7 @@
 
 import Foundation
 import RimeKit
+import System
 import os
 
 /// 构建期 Rime 部署工具:把 YAML 源编译成客户端运行期加载的二进制产物——
@@ -30,23 +31,25 @@ public enum RimeDeployMode: String, Sendable {
   case deploy
 }
 
+/// 路径字段一律 `FilePath`(System):库内的路径表示与计算走这一类别;
+/// 文件系统 I/O 由实现内部转换为 URL,见 helpers 区的类别说明。
 public struct RimeDeployRequest: Sendable {
   /// 源数据:`*.schema.yaml`、`*.dict.yaml` 及其引用的一切。作为 librime 的
   /// `shared_data_dir` 传入,绝不写入。
-  public var dataDirectory: String
+  public var dataDirectory: FilePath
   /// 数据集根目录:also-copy 的源数据落在根,编译产物落在其 `build/` 子目录
   /// ——标准 rime 目录形态。作为 librime 的 `staging_dir` 的是 `build/`。
-  public var outputDirectory: String
+  public var outputDirectory: FilePath
   /// 可写草稿目录,作为 `user_data_dir` 传入;默认 `<outputDirectory>-work`。
-  public var workDirectory: String?
+  public var workDirectory: FilePath?
   public var mode: RimeDeployMode
   /// 调用方期望的产物,相对**staging 根**(`outputDirectory/build`)。它们会被
   /// 断言存在,同时共同定义了"输出目录里哪些文件属于本次数据"——其余一律清除。
-  public var expected: [String]
+  public var expected: [FilePath]
   /// 原样复制而非编译的数据,相对 `dataDirectory`,落在数据集**根**(与
   /// `build/` 里的编译产物并列)。用于 librime 在**运行期**按路径读取的
   /// 东西:`default.yaml`、`opencc/` 之类。
-  public var alsoCopy: [String]
+  public var alsoCopy: [FilePath]
   /// 上游 OpenCC 数据目录(资源 bundle 里的 `opencc/`),作为输出 `opencc/`
   /// 的垫底层:声明覆盖的位置不动,其余由上游补全——数据集可以整目录声明
   /// `opencc/` 拿走整个子树,也可以逐文件声明、由上游补齐其余。librime 按
@@ -55,18 +58,18 @@ public struct RimeDeployRequest: Sendable {
   /// 垫底所得计入声明集(清扫据此保留)。声明集非空即激活清扫:只给本项
   /// 而不给 `expected`/`alsoCopy` 的调用,输出目录里其余未声明文件会被清除
   /// (与完全零声明时"清扫全面禁用"不同)。
-  public var upstreamOpenCC: String?
+  public var upstreamOpenCC: FilePath?
   /// 以 INFO 而非 WARNING 级别记录日志。
   public var verbose: Bool
 
   public init(
-    dataDirectory: String,
-    outputDirectory: String,
-    workDirectory: String? = nil,
+    dataDirectory: FilePath,
+    outputDirectory: FilePath,
+    workDirectory: FilePath? = nil,
     mode: RimeDeployMode = .prebuild,
-    expected: [String] = [],
-    alsoCopy: [String] = [],
-    upstreamOpenCC: String? = nil,
+    expected: [FilePath] = [],
+    alsoCopy: [FilePath] = [],
+    upstreamOpenCC: FilePath? = nil,
     verbose: Bool = false
   ) {
     self.dataDirectory = dataDirectory
@@ -151,22 +154,22 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
   let dataDir = try requireDirectory(request.dataDirectory, "--data-dir")
   let outDir = try makeDirectory(request.outputDirectory, "--out-dir")
   let workDir = try makeDirectory(
-    request.workDirectory ?? (request.outputDirectory + "-work"), "--work-dir")
+    request.workDirectory ?? FilePath(request.outputDirectory.string + "-work"), "--work-dir")
   // 路径校验先于部署:拼错的输入应当立即报错,而不是跑完一整轮编译。
   if let upstream = request.upstreamOpenCC {
-    try validateUpstreamOpenCC(upstream)
+    _ = try requireDirectory(upstream, "--upstream-opencc")
   }
 
   let traits = RimeTraits(
-    sharedDataDir: dataDir,
-    userDataDir: workDir,
+    sharedDataDir: dataDir.string,
+    userDataDir: workDir.string,
     distributionName: rimeDeployToolName,
     distributionCodeName: rimeDeployToolName,
     distributionVersion: "1",
     appName: "rime.deploy",
     minLogLevel: request.verbose ? .info : .warning,
     logDir: "",
-    stagingDir: outDir + "/build")
+    stagingDir: outDir.appending("build").string)
   // prebuilt_data_dir 刻意不设置:它指向随发行版分发的**只读**目录,仅在
   // staging 中找不到资源时回退查询——不是本工具的写入目标,把它指向输出目录
   // 等于把只读缓存说成正在写入的东西。不设置时取 librime 默认的
@@ -261,7 +264,7 @@ public func runRimeDeploy(_ request: RimeDeployRequest) async throws -> RimeDepl
 
   // expected 以 staging 根(build/)为基准;also-copy 与上游垫底在数据集根。
   // 三者合并构成输出目录的完整保留集。
-  let stagedExpected = request.expected.map { "build/" + $0 }
+  let stagedExpected = request.expected.map { FilePath("build").pushing($0) }
   let keeping = stagedExpected + request.alsoCopy + upstreamCopied
   let removed = try removeStaleFiles(in: outDir, keeping: keeping)
 
@@ -280,54 +283,75 @@ private func note(_ message: String) {
   FileHandle.standardError.write(Data("\(rimeDeployToolName): \(message)\n".utf8))
 }
 
-private func requireDirectory(_ path: String, _ flag: String) throws -> String {
-  var isDirectory: ObjCBool = false
-  guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
-    throw RimeDeployError("\(flag) does not exist: \(path)")
-  }
-  guard isDirectory.boolValue else {
-    throw RimeDeployError("\(flag) is not a directory: \(path)")
-  }
-  return URL(fileURLWithPath: path).standardizedFileURL.path
+// 路径的两个类别:
+//
+// * `FilePath`(System)——库内一切路径的**表示与词法计算**:构造、拼接
+//   (`appending`)、父目录(`removingLastComponent`,删到空路径为止)、
+//   遍历产出、声明集与排序比较(不可比较,经 `.string` 定序)。纯词法、
+//   值类型、不锚定 CWD、无 Foundation 桥接。
+// * `URL`(Foundation)——**文件系统边界**的两种用途:① FileManager 的
+//   `at:` 形态调用(createDirectory/copyItem/removeItem/
+//   contentsOfDirectory),经 `url(of:)` 转换;② 文件系统语境规范化
+//   (相对路径按 CWD 绝对化 + `standardizedFileURL` 消解 `.`/`..`),
+//   结果即刻折回 `FilePath`。`fileExists` 与 `enumerator` 仅有路径字符串
+//   形态,在调用点经 `.string` 转换——边界上仅余的 String 面。
+
+private func url(of path: FilePath) -> URL {
+  URL(fileURLWithPath: path.string)
 }
 
-private func makeDirectory(_ path: String, _ flag: String) throws -> String {
+/// 目标存在且是目录:nil = 不存在,false = 存在但非目录。
+private func isDirectory(at path: FilePath) -> Bool? {
+  var isDirectory: ObjCBool = false
+  guard FileManager.default.fileExists(atPath: path.string, isDirectory: &isDirectory) else {
+    return nil
+  }
+  return isDirectory.boolValue
+}
+
+/// 目标存在(fileExists 仅有字符串形态,见类别说明)。
+private func exists(_ path: FilePath) -> Bool {
+  FileManager.default.fileExists(atPath: path.string)
+}
+
+private func requireDirectory(_ path: FilePath, _ flag: String) throws -> FilePath {
+  guard let isDirectory = isDirectory(at: path) else {
+    throw RimeDeployError("\(flag) does not exist: \(path)")
+  }
+  guard isDirectory else {
+    throw RimeDeployError("\(flag) is not a directory: \(path)")
+  }
+  return FilePath(url(of: path).standardizedFileURL.path)
+}
+
+private func makeDirectory(_ path: FilePath, _ flag: String) throws -> FilePath {
   do {
-    try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: url(of: path), withIntermediateDirectories: true)
   } catch {
     throw RimeDeployError("cannot create \(flag) \(path): \(error.localizedDescription)")
   }
-  return URL(fileURLWithPath: path).standardizedFileURL.path
+  return FilePath(url(of: path).standardizedFileURL.path)
 }
 
-private func copyThrough(name: String, from dataDir: String, to outDir: String) throws {
-  let source = "\(dataDir)/\(name)"
-  let destination = "\(outDir)/\(name)"
-  guard FileManager.default.fileExists(atPath: source) else {
+private func copyThrough(name: FilePath, from dataDir: FilePath, to outDir: FilePath) throws {
+  let source = dataDir.pushing(name)
+  let destination = outDir.pushing(name)
+  guard exists(source) else {
     throw RimeDeployError("--also-copy \(name): no such file in \(dataDir)")
   }
   do {
-    let parent = (destination as NSString).deletingLastPathComponent
+    let parent = destination.removingLastComponent()
     if !parent.isEmpty {
-      try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+      try FileManager.default.createDirectory(
+        at: url(of: parent), withIntermediateDirectories: true)
     }
-    if FileManager.default.fileExists(atPath: destination) {
-      try FileManager.default.removeItem(atPath: destination)
+    if exists(destination) {
+      try FileManager.default.removeItem(at: url(of: destination))
     }
-    try FileManager.default.copyItem(atPath: source, toPath: destination)
+    try FileManager.default.copyItem(at: url(of: source), to: url(of: destination))
   } catch {
     throw RimeDeployError("cannot copy \(name) into \(outDir): \(error.localizedDescription)")
-  }
-}
-
-/// 声明目标必须存在且是目录;消息即面向用户的诊断。
-private func validateUpstreamOpenCC(_ source: String) throws {
-  var isDirectory: ObjCBool = false
-  guard FileManager.default.fileExists(atPath: source, isDirectory: &isDirectory) else {
-    throw RimeDeployError("--upstream-opencc does not exist: \(source)")
-  }
-  guard isDirectory.boolValue else {
-    throw RimeDeployError("--upstream-opencc is not a directory: \(source)")
   }
 }
 
@@ -335,27 +359,25 @@ private func validateUpstreamOpenCC(_ source: String) throws {
 /// 文件复制进输出目录的同名位置,声明覆盖的位置一律跳过;未声明的同名遗留
 /// 物被上游覆盖。返回实际复制的相对路径(`opencc/` 前缀),计入声明集。
 private func copyUpstreamOpenCC(
-  from source: String, into outDir: String, datasetProvided: Set<String>
-) throws -> [String] {
-  try validateUpstreamOpenCC(source)
-
-  var copied: [String] = []
-  for relative in relativeFilePaths(in: source).sorted() {
+  from source: FilePath, into outDir: FilePath, datasetProvided: Set<FilePath>
+) throws -> [FilePath] {
+  var copied: [FilePath] = []
+  for relative in relativeFilePaths(in: source).sorted(by: { $0.string < $1.string }) {
     // 点文件/点目录不垫底(与插件输入侧同规):bundle 混入的 .DS_Store 之类
     // 不该随全量集分发,更不该受声明集保护、永不清扫。
-    guard
-      !relative.split(separator: "/").contains(where: { $0.hasPrefix(".") })
-    else { continue }
-    let name = "opencc/\(relative)"
+    guard !relative.components.contains(where: { $0.string.hasPrefix(".") }) else { continue }
+    let name = FilePath("opencc").pushing(relative)
     guard !declarationsCover(name, in: datasetProvided) else { continue }
-    let destination = "\(outDir)/\(name)"
+    let destination = outDir.pushing(name)
     do {
-      let parent = (destination as NSString).deletingLastPathComponent
-      try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
-      if FileManager.default.fileExists(atPath: destination) {
-        try FileManager.default.removeItem(atPath: destination)
+      let parent = destination.removingLastComponent()
+      try FileManager.default.createDirectory(
+        at: url(of: parent), withIntermediateDirectories: true)
+      if exists(destination) {
+        try FileManager.default.removeItem(at: url(of: destination))
       }
-      try FileManager.default.copyItem(atPath: "\(source)/\(relative)", toPath: destination)
+      try FileManager.default.copyItem(
+        at: url(of: source.pushing(relative)), to: url(of: destination))
       copied.append(name)
     } catch {
       throw RimeDeployError(
@@ -369,47 +391,50 @@ private func copyUpstreamOpenCC(
 /// 整目录声明(`opencc` 覆盖 `opencc/<名字>`)。上游垫底与清扫共用此判据:
 /// 被声明覆盖的位置既不由上游覆盖,也不被清扫删除。
 ///
-/// 按斜杠前缀逐级上溯,前缀长度严格递减,无斜杠即终止。不要用
-/// `NSString.deletingLastPathComponent` 做链式判断:单段路径的父是空串,
-/// 空串的父还是空串,循环不终止。
-private func declarationsCover(_ relative: String, in declared: Set<String>) -> Bool {
-  var path = Substring(relative)
+/// 沿 `removingLastComponent()` 逐级上溯,删到空路径为止——终止性由 API
+/// 承担(见 helpers 区的类别说明)。
+private func declarationsCover(_ relative: FilePath, in declared: Set<FilePath>) -> Bool {
+  var path = relative
   while true {
-    if declared.contains(String(path)) { return true }
-    guard let slash = path.lastIndex(of: "/") else { return false }
-    path = path[..<slash]
+    if declared.contains(path) { return true }
+    let parent = path.removingLastComponent()
+    if parent == path || parent.isEmpty { return false }
+    path = parent
   }
 }
 
-/// `directory` 下任意深度的全部文件,以相对路径表示。
-public func relativeFilePaths(in directory: String) -> [String] {
-  guard let walker = FileManager.default.enumerator(atPath: directory) else { return [] }
-  var relative: [String] = []
+/// `directory` 下任意深度的全部文件,以相对路径表示(enumerator 仅有
+/// 字符串形态,产出即相对条目,见类别说明)。
+public func relativeFilePaths(in directory: FilePath) -> [FilePath] {
+  guard let walker = FileManager.default.enumerator(atPath: directory.string)
+  else { return [] }
+  var relative: [FilePath] = []
   while let entry = walker.nextObject() as? String {
     var isDirectory: ObjCBool = false
-    let path = "\(directory)/\(entry)"
+    let path = directory.string + "/" + entry
     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
       !isDirectory.boolValue
     else { continue }
-    relative.append(entry)
+    relative.append(FilePath(entry))
   }
   return relative
 }
 
 /// `directory` 下的全部目录,最深的在前——这样被清空的子目录先于其父目录
 /// 被移除。
-private func relativeDirectories(in directory: String) -> [String] {
-  guard let walker = FileManager.default.enumerator(atPath: directory) else { return [] }
-  var relative: [String] = []
+private func relativeDirectories(in directory: FilePath) -> [FilePath] {
+  guard let walker = FileManager.default.enumerator(atPath: directory.string)
+  else { return [] }
+  var relative: [FilePath] = []
   while let entry = walker.nextObject() as? String {
     var isDirectory: ObjCBool = false
-    let path = "\(directory)/\(entry)"
+    let path = directory.string + "/" + entry
     guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
       isDirectory.boolValue
     else { continue }
-    relative.append(entry)
+    relative.append(FilePath(entry))
   }
-  return relative.sorted { $0.split(separator: "/").count > $1.split(separator: "/").count }
+  return relative.sorted { $0.components.count > $1.components.count }
 }
 
 /// 清除输出目录里本次数据未声明的一切,返回清除的文件数。
@@ -420,14 +445,15 @@ private func relativeDirectories(in directory: String) -> [String] {
 ///
 /// 什么都没声明的调用方完全不做清除:声明是区分"产物"与"早于本次数据集的
 /// 东西"的唯一依据,空的声明会让每个文件都显得陈旧——包括刚写出来的那些。
-private func removeStaleFiles(in outDir: String, keeping declared: [String]) throws -> Int {
+private func removeStaleFiles(in outDir: FilePath, keeping declared: [FilePath]) throws -> Int {
   guard !declared.isEmpty else { return 0 }
   let expected = Set(declared)
   var removed = 0
-  for relative in relativeFilePaths(in: outDir).sorted()
+  for relative in relativeFilePaths(in: outDir).sorted(by: { $0.string < $1.string })
   where !declarationsCover(relative, in: expected) {
+    let stale = outDir.pushing(relative)
     do {
-      try FileManager.default.removeItem(atPath: "\(outDir)/\(relative)")
+      try FileManager.default.removeItem(at: url(of: stale))
       removed += 1
     } catch {
       throw RimeDeployError(
@@ -435,27 +461,29 @@ private func removeStaleFiles(in outDir: String, keeping declared: [String]) thr
     }
   }
   for relative in relativeDirectories(in: outDir) {
-    let path = "\(outDir)/\(relative)"
-    if (try? FileManager.default.contentsOfDirectory(atPath: path))?.isEmpty == true {
-      try? FileManager.default.removeItem(atPath: path)
+    let path = outDir.pushing(relative)
+    let contents = try? FileManager.default.contentsOfDirectory(
+      at: url(of: path), includingPropertiesForKeys: nil)
+    if contents?.isEmpty == true {
+      try? FileManager.default.removeItem(at: url(of: path))
     }
   }
   return removed
 }
 
-private func missingArtifacts(in outDir: String, expected: [String]) -> [String] {
+private func missingArtifacts(in outDir: FilePath, expected: [FilePath]) -> [FilePath] {
   expected
-    .filter { !FileManager.default.fileExists(atPath: "\(outDir)/\($0)") }
-    .sorted()
+    .filter { !exists(outDir.pushing($0)) }
+    .sorted(by: { $0.string < $1.string })
 }
 
-private func describeMissing(_ missing: [String], in outDir: String) -> String {
-  let listing = relativeFilePaths(in: outDir).sorted()
+private func describeMissing(_ missing: [FilePath], in outDir: FilePath) -> String {
+  let listing = relativeFilePaths(in: outDir).sorted(by: { $0.string < $1.string })
   return """
     compilation reported success but these artifacts are missing:
-    \(missing.map { "  " + $0 }.joined(separator: "\n"))
+    \(missing.map { "  " + $0.string }.joined(separator: "\n"))
     produced in \(outDir):
-    \(listing.map { "  " + $0 }.joined(separator: "\n"))
+    \(listing.map { "  " + $0.string }.joined(separator: "\n"))
 
     A declared artifact is named after the file it came from, so the build can
     know it before running the compiler. librime names its output after the
