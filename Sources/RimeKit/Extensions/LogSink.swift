@@ -29,16 +29,23 @@ public typealias RimeLogHandler = @Sendable (_ record: RimeLogRecord) -> Void
 /// 分级回调槽:转发与散点错误共用的分发目标,由 `RimeLogSink.install(handler:)`
 /// 注册;未注册时记录丢弃。
 enum RimeLog {
-  private static let storage = OSAllocatedUnfairLock<RimeLogHandler?>(initialState: nil)
+  /// Store a reference, rather than extracting a closure from an inout lock slot.
+  /// Swift's optimized closure reabstraction can otherwise wrap the stored handler
+  /// again on every read, growing the call stack with the number of log records.
+  private final class HandlerBox: Sendable {
+    let handler: RimeLogHandler
+    init(_ handler: @escaping RimeLogHandler) { self.handler = handler }
+  }
+  private static let storage = OSAllocatedUnfairLock<HandlerBox?>(initialState: nil)
 
   /// 注册回调(nil 摘除);重复注册以后一次为准。
   static func set(handler: RimeLogHandler?) {
-    storage.withLock { $0 = handler }
+    storage.withLock { $0 = handler.map(HandlerBox.init) }
   }
 
   /// 分发一条记录到当前回调(模块内:glog 转发回调)。
   static func emit(_ record: RimeLogRecord) {
-    storage.withLock { $0 }?(record)
+    storage.withLock { $0 }?.handler(record)
   }
 
   /// 散点错误路径便捷分发:时间为分发时刻,file/line 为 Swift 调用点。
