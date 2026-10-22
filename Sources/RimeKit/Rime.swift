@@ -94,14 +94,16 @@ public distributed actor Rime {
   internal func engineVarPageClear(for sessionID: RimeSessionID) throws(RimeError) {
     guard varPageBoxes[sessionID] != nil else { return }
     _ = RimeVarPageModule.clearResolver(for: sessionID)
+    varPageBoxes.removeValue(forKey: sessionID)
   }
 
   internal static let cStringBufferSize = 1024
   internal let cStringBuffer = UnsafeMutablePointer<CChar>.allocate(capacity: cStringBufferSize)
   internal var configs: [ObjectHandle<RimeConfig>: rime_config_t] = [:]
   internal var configIterators: [ObjectHandle<RimeConfigIterator>: rime_config_iterator_t] = [:]
-  /// varpage 页界表:会话 → tile 表。box 随进程存活(会话数有界),
-  /// C 侧 passUnretained 持续有效——头文件的 user_data 生命周期契约。
+  /// varpage 页界表:会话 → tile 表。C 侧 passUnretained 的 box 由本表
+  /// 持有，直到 resolver 被摘除或原生会话销毁后再释放。不能跨会话 ID
+  /// 复用保留，否则新会话会误认为 resolver 已安装。
   internal var varPageBoxes: [RimeSessionID: VarPageTileBox] = [:]
 
   internal var candidateIterators: [ObjectHandle<RimeCandidate>: rime_candidate_list_iterator_t] =
@@ -182,6 +184,7 @@ public distributed actor Rime {
 
   public distributed func finalize() async throws(RimeError) {
     rimeApi.finalize()
+    varPageBoxes.removeAll()
   }
 
   // MARK: 维护
@@ -376,7 +379,7 @@ public distributed actor Rime {
     try engineVarPageHighlight(index: index, for: sessionID)
   }
 
-  /// 摘除会话的 varpage resolver(此后恒走内置分页)。会话销毁亦自动摘。
+  /// 摘除 resolver 并释放缓存；再次推表可重新安装。会话销毁亦自动摘。
   public distributed func varPageClear(for sessionID: RimeSessionID) async throws(RimeError) {
     try engineVarPageClear(for: sessionID)
   }

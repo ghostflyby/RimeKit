@@ -10,6 +10,36 @@ import Testing
 /// 仅展开);二次翻页(open 后)照常答目标行,落点 = 目标行首 + 原偏移。
 @Suite struct VarPageTurnTests {
   @Test(arguments: RimeBackend.allCases)
+  func clearThenRepopulateInstallsANewResolver(backend: RimeBackend) async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
+    let session = try await env.makeSession()
+    try await session.setOption("_linear", value: true)
+    _ = try await session.typeKeys("mmmm")
+    try session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    _ = try session.keyTransaction(keyCode: 0xFF54, modifierMask: 0)
+    #expect(try session.varPageIsOpen())
+    try session.clearVarPageResolver()
+    #expect(try !session.varPageIsOpen(), "clear must release the old open/table state")
+    try session.updateVarPageTiles(starts: [0, 3, 6, 9], total: 12)
+    let result = try session.keyTransaction(keyCode: 0xFF54, modifierMask: 0)
+    let menu = try #require(result.context?.menu)
+    #expect(menu.pageNumber * menu.pageSize + menu.highlightedCandidateIndex == 0)
+    #expect(try session.varPageLastAction() == VarPageTurnAction.forwardTurn.rawValue)
+  }
+
+  @Test
+  func destroyedSessionsReleaseTheirResolverBoxes() async throws {
+    let env = try await RimeTestEnvironment.bootstrapped(backend: .inProcess)
+    let session = try await env.makeSession()
+    try session.updateVarPageTiles(starts: [0, 3], total: 6)
+    let installed = await env.root.whenLocal { $0.varPageBoxes[session.sessionID] != nil }
+    #expect(installed == true)
+    await session.invalidate()
+    let released = await env.root.whenLocal { $0.varPageBoxes[session.sessionID] == nil }
+    #expect(released == true)
+  }
+
+  @Test(arguments: RimeBackend.allCases)
   func firstTurnOpensAndKeepsHighlight(backend: RimeBackend) async throws {
     let env = try await RimeTestEnvironment.bootstrapped(backend: backend)
     let session = try await env.makeSession()

@@ -167,9 +167,8 @@ final class VarPageTileBox: Sendable {
 /// varpage 模块 API 绑定与 resolver 的 C 桥。
 ///
 /// user_data 所有权(头文件):模块只存不释;resolver 的安全窗口自会话
-/// 销毁(或 clear_resolver)开启。RimeKit 侧 box 由 actor 字典强持有、
-/// 随进程存活(会话数有界,与通知 handler 的 retired 模式同型)——不
-/// 抢跑生命周期,零 use-after-free 面。
+/// 销毁(或 clear_resolver)开启。RimeKit 侧 box 由 actor 字典强持有，
+/// 在原生 resolver 摘除后再释放，不跨会话 ID 复用保留缓存。
 enum RimeVarPageModule {
   /// 对会话安装 resolver。模块不存在(librime 未编入 varpage)返回 false,
   /// 调用方应退化运行(内置分页)。
@@ -260,7 +259,7 @@ extension RimeSession {
     }
   }
 
-  /// 摘除 resolver(此后该会话恒走内置分页)。
+  /// 摘除 resolver 并释放页界缓存；再次 updateVarPageTiles 可重新安装。
   public func clearVarPageResolver() throws {
     let root = self.root
     let id = self.id

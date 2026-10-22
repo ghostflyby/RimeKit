@@ -276,7 +276,11 @@ extension RimeSession {
 
 extension Rime {
   func engineCreateSession() throws(RimeError) -> RimeSessionID {
-    RimeSessionID(rawValue: UInt(rimeApi.create_session()))
+    let session = RimeSessionID(rawValue: UInt(rimeApi.create_session()))
+    // Also discard stale state if native callers destroyed the previous session.
+    // A fresh session must install its own resolver even when its address repeats.
+    varPageBoxes.removeValue(forKey: session)
+    return session
   }
 
   func engineFindSession(with sessionID: RimeSessionID) throws(RimeError) -> Bool {
@@ -284,15 +288,20 @@ extension Rime {
   }
 
   func engineDestroySession(with sessionID: RimeSessionID) throws(RimeError) -> Bool {
-    rimeApi.destroy_session(sessionID.rawValue)
+    let destroyed = rimeApi.destroy_session(sessionID.rawValue)
+    // Native destruction removes the resolver before its unretained box dies.
+    varPageBoxes.removeValue(forKey: sessionID)
+    return destroyed
   }
 
   func engineCleanupStaleSessions() throws(RimeError) {
     rimeApi.cleanup_stale_sessions()
+    varPageBoxes = varPageBoxes.filter { rimeApi.find_session($0.key.rawValue) }
   }
 
   func engineCleanupAllSessions() throws(RimeError) {
     rimeApi.cleanup_all_sessions()
+    varPageBoxes.removeAll()
   }
 }
 

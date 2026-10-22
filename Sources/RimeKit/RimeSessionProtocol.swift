@@ -63,7 +63,7 @@ public protocol RimeSessionProtocol: AnyObject, Sendable {
   /// 高亮指定候选(不选词):首翻页键「只展开不动候选」的回滚件。
   func varPageHighlight(index: Int) throws
 
-  /// 摘除 varpage resolver(此后恒走内置分页)。
+  /// 摘除 varpage resolver 并释放页界缓存；再次 updateVarPageTiles 可重新安装。
   func clearVarPageResolver() throws
 
   /// 协调失效:从注册表移除并销毁底层会话(返回后该会话在引擎中已不存在)。
